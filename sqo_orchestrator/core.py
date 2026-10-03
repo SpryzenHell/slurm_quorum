@@ -374,6 +374,12 @@ class SlurmController:
     def submit_claimed(self, job):
         scheduler_id = self.client.submit(job)
         if not self.db.attach_scheduler(job.job_id, scheduler_id):
+            cancel = getattr(self.client, "cancel", None)
+            if cancel is not None:
+                try:
+                    cancel(scheduler_id)
+                except Exception:
+                    pass
             raise RuntimeError(
                 f"job {job.job_id} lost ownership before Slurm submission was recorded"
             )
