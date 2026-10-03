@@ -95,11 +95,31 @@ class SlurmClient:
         lines.append(command)
         return "\n".join(line for line in lines if line) + "\n"
 
-    def submit(self, job: JobSpec) -> str:
+    def find_existing(self, job: JobSpec) -> str | None:
         if self.dry_run or not self.available():
+            return None
+        name = f"sqo-{job.job_id[:24]}"
+        try:
+            output = subprocess.check_output(
+                ["squeue", "-h", "--name", name, "-o", "%i"],
+                text=True,
+                stderr=subprocess.STDOUT,
+            )
+        except subprocess.CalledProcessError:
+            output = ""
+        ids = [line.strip() for line in output.splitlines() if line.strip()]
+        return ids[0] if ids else None
+
+    def submit(self, job: JobSpec) -> str:
+        if self.dry_run:
             return f"DRY-{job.job_id}"
+        if not self.available():
+            raise SlurmError("sbatch is not installed or not on PATH")
         script_path: Path | None = None
         try:
+            existing = self.find_existing(job)
+            if existing is not None:
+                return existing
             with tempfile.NamedTemporaryFile(
                 "w", prefix=f"{job.job_id}-", suffix=".sbatch",
                 dir=self.work_dir, delete=False,
