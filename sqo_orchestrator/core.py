@@ -97,19 +97,23 @@ class NodeDB:
             c.execute("BEGIN IMMEDIATE")
             row = c.execute("SELECT * FROM jobs WHERE job_id=?", (job.job_id,)).fetchone()
             now = time.time()
+            requested_attempt = max(1, int(job.metadata.get("sqo_attempt", 1)))
             if row is None:
                 c.execute(
                     "INSERT INTO jobs(job_id,payload,state,priority,attempts,owner,queued_at,started_at,heartbeat_at) "
                     "VALUES(?,?,?,?,?,?,?,?,?)",
-                    (job.job_id, job.to_json(), JobState.RUNNING, job.priority, 1,
+                    (job.job_id, job.to_json(), JobState.RUNNING, job.priority, requested_attempt,
                      worker_id, job.submitted_at, now, now),
                 )
-                self._event(c, "job.started", job.job_id, {"worker": worker_id, "attempt": 1, "source": "redis"})
+                self._event(
+                    c, "job.started", job.job_id,
+                    {"worker": worker_id, "attempt": requested_attempt, "source": "redis"},
+                )
             elif row["state"] == JobState.RUNNING:
                 c.execute("UPDATE jobs SET owner=?,heartbeat_at=? WHERE job_id=?", (worker_id, now, job.job_id))
                 row = c.execute("SELECT * FROM jobs WHERE job_id=?", (job.job_id,)).fetchone()
             else:
-                next_attempt = int(row["attempts"]) + 1
+                next_attempt = max(int(row["attempts"]) + 1, requested_attempt)
                 c.execute(
                     "UPDATE jobs SET payload=?,state=?,priority=?,attempts=?,owner=?,started_at=?,heartbeat_at=?,finished_at=NULL,error=NULL,scheduler_id=NULL "
                     "WHERE job_id=?",
