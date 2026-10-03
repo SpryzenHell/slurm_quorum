@@ -1,0 +1,20 @@
+name: slurm-quorum-tests
+
+on:
+  push:
+    branches: ["main", "feature/slurm-quorum-orchestrator"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[test,production]"
+      - run: python -m pytest -q
+      - run: python -m py_compile sqo_orchestrator/*.py
+      - run: python -m sqo_orchestrator failover --root .sqo/ci-failover
+      - run: python -m sqo_orchestrator load --jobs 10000 --workers 4 --root .sqo/ci-load
