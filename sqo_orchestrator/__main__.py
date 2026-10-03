@@ -26,6 +26,8 @@ sv.add_argument("--state-dir", type=Path)
 sv.add_argument("--lease-dir", type=Path)
 sv.add_argument("--s3-bucket")
 sv.add_argument("--s3-prefix", default="slurm-quorum")
+sv.add_argument("--s3-endpoint-url")
+sv.add_argument("--s3-region")
 
 a = p.parse_args()
 
@@ -70,4 +72,6 @@ else:
                   float(os.environ.get("SQO_ELECTION_MAX_S", "4"))),
         s3_bucket=a.s3_bucket,
         s3_prefix=a.s3_prefix,
+        s3_endpoint_url=a.s3_endpoint_url,
+        s3_region=a.s3_region,
     ).serve()
