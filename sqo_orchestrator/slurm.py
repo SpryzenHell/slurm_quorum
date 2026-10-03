@@ -82,11 +82,12 @@ class SlurmClient:
             subprocess.list2cmdline([str(part)]) for part in job.command
         )
         wall_minutes = max(1, (job.time_limit_s + 59) // 60)
+        partition = job.partition or self.partition
         lines = [
             "#!/usr/bin/env bash",
             "set -euo pipefail",
             f"#SBATCH --job-name={job_name}",
-            f"#SBATCH --partition={self.partition}",
+            f"#SBATCH --partition={partition}",
             f"#SBATCH --cpus-per-task={job.cpus}",
             f"#SBATCH --mem={job.memory_mb}M",
             f"#SBATCH --time={wall_minutes}",
@@ -95,7 +96,12 @@ class SlurmClient:
             f"#SBATCH --error={self.work_dir / (job.job_id + '.err')}",
         ]
         if job.gpus:
-            lines.append(f"#SBATCH --gres=gpu:{job.gpus}")
+            gres = f"gpu:{job.gpus}" if not job.gpu_type else f"gpu:{job.gpu_type}:{job.gpus}"
+            lines.append(f"#SBATCH --gres={gres}")
+        if job.qos:
+            lines.append(f"#SBATCH --qos={job.qos}")
+        if job.constraint:
+            lines.append(f"#SBATCH --constraint={job.constraint}")
         if env:
             lines.append(env)
         lines.append(command)
