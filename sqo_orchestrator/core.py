@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS jobs(
  heartbeat_at REAL,finished_at REAL,result TEXT,error TEXT,
  scheduler_id TEXT,slurm_state TEXT,slurm_exit_code TEXT);
 CREATE INDEX IF NOT EXISTS idx_jobs_ready ON jobs(state,priority DESC,queued_at ASC);
+CREATE INDEX IF NOT EXISTS idx_jobs_scheduler ON jobs(scheduler_id);
 CREATE TABLE IF NOT EXISTS events(
  seq INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT UNIQUE NOT NULL,ts REAL NOT NULL,node_id TEXT NOT NULL,
  kind TEXT NOT NULL,job_id TEXT,payload TEXT NOT NULL);
@@ -84,7 +85,7 @@ class NodeDB:
         if cur.rowcount:self._event(c,'job.succeeded',job_id,result)
         c.execute('COMMIT'); return cur.rowcount==1
     def fail(self,job_id,worker_id,error,requeue,c):
-        st=JobState.RETRY if requeue else JobState.FAILED; c.execute('BEGIN IMMEDIATE'); cur=c.execute('UPDATE jobs SET state=?,error=?,finished_at=?,heartbeat_at=NULL WHERE job_id=? AND owner=? AND state=?',(st,error[:4000],time.time(),job_id,worker_id,JobState.RUNNING))
+        st=JobState.RETRY if requeue else JobState.FAILED; c.execute('BEGIN IMMEDIATE'); cur=c.execute('UPDATE jobs SET state=?,error=?,finished_at=?,heartbeat_at=NULL,owner=NULL WHERE job_id=? AND owner=? AND state=?',(st,error[:4000],time.time(),job_id,worker_id,JobState.RUNNING))
         if cur.rowcount:self._event(c,'job.retry' if requeue else 'job.failed',job_id,{'error':error[:4000]})
         c.execute('COMMIT'); return cur.rowcount==1
     def attach_scheduler(self, job_id, scheduler_id):
