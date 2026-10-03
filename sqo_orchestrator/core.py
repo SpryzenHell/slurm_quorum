@@ -88,6 +88,35 @@ class NodeDB:
         st=JobState.RETRY if requeue else JobState.FAILED; c.execute('BEGIN IMMEDIATE'); cur=c.execute('UPDATE jobs SET state=?,error=?,finished_at=?,heartbeat_at=NULL,owner=NULL WHERE job_id=? AND owner=? AND state=?',(st,error[:4000],time.time(),job_id,worker_id,JobState.RUNNING))
         if cur.rowcount:self._event(c,'job.retry' if requeue else 'job.failed',job_id,{'error':error[:4000]})
         c.execute('COMMIT'); return cur.rowcount==1
+    def ensure_running(self, job: JobSpec, worker_id: str):
+        with self.connect() as c:
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute("SELECT * FROM jobs WHERE job_id=?", (job.job_id,)).fetchone()
+            now = time.time()
+            if row is None:
+                c.execute(
+                    "INSERT INTO jobs(job_id,payload,state,priority,attempts,owner,queued_at,started_at,heartbeat_at) "
+                    "VALUES(?,?,?,?,?,?,?,?,?)",
+                    (job.job_id, job.to_json(), JobState.RUNNING, job.priority, 1,
+                     worker_id, job.submitted_at, now, now),
+                )
+                self._event(c, "job.started", job.job_id, {"worker": worker_id, "attempt": 1, "source": "redis"})
+            elif row["state"] == JobState.RUNNING and row["scheduler_id"]:
+                c.execute("ROLLBACK")
+                return row
+            else:
+                c.execute(
+                    "UPDATE jobs SET payload=?,state=?,priority=?,attempts=attempts+1,owner=?,started_at=?,heartbeat_at=?,finished_at=NULL,error=NULL,scheduler_id=NULL "
+                    "WHERE job_id=?",
+                    (job.to_json(), JobState.RUNNING, job.priority, worker_id, now, now, job.job_id),
+                )
+                self._event(
+                    c, "job.started", job.job_id,
+                    {"worker": worker_id, "attempt": int(row["attempts"]) + 1, "source": "redis"},
+                )
+            c.execute("COMMIT")
+            return self.get_job(job.job_id)
+
     def attach_scheduler(self, job_id, scheduler_id):
         with self.connect() as c:
             c.execute("BEGIN IMMEDIATE")
@@ -134,7 +163,7 @@ class NodeDB:
                 "WHERE job_id=? AND scheduler_id=? AND state=?",
                 (
                     state,
-                    scheduler_id,
+                    scheduler_id if success else None,
                     "COMPLETED" if success else "FAILED",
                     exit_code,
                     time.time(),
