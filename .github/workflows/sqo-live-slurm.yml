@@ -1,0 +1,24 @@
+name: sqo-live-slurm-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      partition:
+        description: 'Slurm partition for the smoke job'
+        required: true
+        default: 'gpu'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  slurm-smoke:
+    runs-on: [self-hosted, slurm-sqo]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e ./sqo_orchestrator
+      - run: python scripts/check_slurm_cluster.py --partition '${{ inputs.partition }}'
