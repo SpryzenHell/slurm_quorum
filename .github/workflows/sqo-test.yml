@@ -18,3 +18,4 @@ jobs:
       - run: PYTHONPATH=. python -m py_compile sqo_orchestrator/*.py
       - run: PYTHONPATH=. python -m sqo_orchestrator failover --root .sqo/ci-failover
       - run: PYTHONPATH=. python -m sqo_orchestrator load --jobs 10000 --workers 4 --root .sqo/ci-load
+      - run: bash scripts/check_3node_local.sh .sqo/ci-network
