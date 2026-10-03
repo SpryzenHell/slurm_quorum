@@ -26,6 +26,15 @@ redis.call('ZADD', KEYS[3], expiry, job_id)
 return job_id
 """
 
+_RENEW_LUA = r"""
+local owner = redis.call('HGET', KEYS[1], ARGV[1])
+if not owner or owner ~= ARGV[2] then
+  return 0
+end
+redis.call('ZADD', KEYS[2], tonumber(ARGV[3]), ARGV[1])
+return 1
+"""
+
 _REQUEUE_LUA = r"""
 local ids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])
 for _, job_id in ipairs(ids) do
@@ -60,6 +69,7 @@ class RedisJobQueue:
         self.lease_key = f"{namespace}:leases:{queue_name}"
         self.meta_key = f"{namespace}:meta:{queue_name}"
         self.claim_script = self.redis.register_script(_CLAIM_LUA)
+        self.renew_script = self.redis.register_script(_RENEW_LUA)
         self.requeue_script = self.redis.register_script(_REQUEUE_LUA)
 
     @staticmethod
@@ -118,15 +128,11 @@ class RedisJobQueue:
         )
 
     def renew(self, job_id: str, worker_id: str, lease_s: float = 30.0) -> bool:
-        current = self.redis.hget(self.inflight_key, job_id)
-        if current is None:
-            return False
-        if isinstance(current, bytes):
-            current = current.decode()
-        if current != worker_id:
-            return False
-        self.redis.zadd(self.lease_key, {job_id: time.time() + lease_s})
-        return True
+        result = self.renew_script(
+            keys=[self.inflight_key, self.lease_key],
+            args=[job_id, worker_id, time.time() + lease_s],
+        )
+        return int(result or 0) == 1
 
     def ack(self, job_id: str, worker_id: str | None = None) -> bool:
         current = self.redis.hget(self.inflight_key, job_id)
