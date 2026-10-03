@@ -52,5 +52,10 @@ if args.once:
     print(agent.tick())
 else:
     while True:
-        print(agent.tick())
+        try:
+            print(agent.tick(), flush=True)
+        except KeyboardInterrupt:
+            break
+        except Exception as exc:
+            print(f"SQO agent transient error: {exc}", flush=True)
         time.sleep(args.interval)
