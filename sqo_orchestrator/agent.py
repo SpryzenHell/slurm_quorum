@@ -61,7 +61,8 @@ class RedisSlurmAgent:
         if claim is None:
             return None
         job = claim.job
-        self.db.ensure_running(job, self.controller.worker_id)
+        row = self.db.ensure_running(job, self.controller.worker_id)
+        job.metadata["sqo_attempt"] = int(row["attempts"])
         try:
             scheduler_id = self.controller.submit_claimed(job)
             self.queue.ack(job.job_id, self.controller.worker_id)
