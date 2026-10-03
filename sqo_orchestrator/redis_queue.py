@@ -35,6 +35,7 @@ for _, job_id in ipairs(ids) do
     redis.call('ZREM', KEYS[1], job_id)
     redis.call('ZREM', KEYS[2], job_id)
     redis.call('HDEL', KEYS[3], job_id)
+    redis.call('HDEL', KEYS[4], job_id)
     if score then redis.call('ZADD', KEYS[5], tonumber(score), job_id) end
   end
 end
@@ -70,31 +71,29 @@ class RedisJobQueue:
         pipe = self.redis.pipeline(transaction=True)
         pipe.hset(self.meta_key, job.job_id, json.dumps({
             "payload": payload,
-            "score": self._score(job),
             "queue": job.queue,
         }, sort_keys=True))
+        pipe.hset(f"{self.namespace}:scores", job.job_id, self._score(job))
         pipe.hset(f"{self.namespace}:payloads", job.job_id, payload)
         pipe.zadd(self.ready_key, {job.job_id: self._score(job)})
         pipe.execute()
         return job.job_id
 
     def enqueue_many(self, jobs):
+        jobs = list(jobs)
         pipe = self.redis.pipeline(transaction=True)
         for job in jobs:
             payload = job.to_json()
             pipe.hset(
                 self.meta_key,
                 job.job_id,
-                json.dumps({
-                    "payload": payload,
-                    "score": self._score(job),
-                    "queue": job.queue,
-                }, sort_keys=True),
+                json.dumps({"payload": payload, "queue": job.queue}, sort_keys=True),
             )
+            pipe.hset(f"{self.namespace}:scores", job.job_id, self._score(job))
             pipe.hset(f"{self.namespace}:payloads", job.job_id, payload)
             pipe.zadd(self.ready_key, {job.job_id: self._score(job)})
         pipe.execute()
-        return len(list(jobs))
+        return len(jobs)
 
     def claim(self, worker_id: str, lease_s: float = 30.0) -> RedisClaim | None:
         now = time.time()
@@ -146,7 +145,7 @@ class RedisJobQueue:
 
     def requeue_expired(self, limit: int = 100) -> list[str]:
         ids = self.requeue_script(
-            keys=[self.lease_key, self.inflight_key, self.meta_key, self.meta_key, self.ready_key],
+            keys=[self.lease_key, self.inflight_key, self.meta_key, f"{self.namespace}:scores", self.ready_key],
             args=[time.time(), limit],
         )
         return [
