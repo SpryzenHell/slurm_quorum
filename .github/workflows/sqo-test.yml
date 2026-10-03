@@ -1,9 +1,12 @@
 name: slurm-quorum-tests
 
 on:
-  push:
-    branches: ["main", "feature/slurm-quorum-orchestrator"]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: sqo-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
