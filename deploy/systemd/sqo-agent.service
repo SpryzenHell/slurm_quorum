@@ -1,0 +1,28 @@
+[Unit]
+Description=Slurm-Quorum Orchestrator Slurm Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/slurm-quorum
+EnvironmentFile=/etc/slurm-quorum/sqo.env
+ExecStart=/usr/bin/python3 /opt/slurm-quorum/scripts/run_slurm_agent.py \
+  --redis-url ${SQO_REDIS_URL} \
+  --queue ${SQO_QUEUE} \
+  --namespace ${SQO_NAMESPACE} \
+  --root /var/lib/slurm-quorum/${SQO_WORKER_ID} \
+  --worker-id ${SQO_WORKER_ID} \
+  --partition ${SQO_PARTITION} \
+  --interval ${SQO_AGENT_INTERVAL_S} \
+  --lease-s ${SQO_LEASE_TTL_S}
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/slurm-quorum /opt/slurm-quorum/.sqo
+
+[Install]
+WantedBy=multi-user.target
