@@ -83,6 +83,8 @@ class RedisJobQueue:
         self.inflight_key = f"{namespace}:inflight:{queue_name}"
         self.lease_key = f"{namespace}:leases:{queue_name}"
         self.meta_key = f"{namespace}:meta:{queue_name}"
+        self.scores_key = f"{namespace}:scores:{queue_name}"
+        self.payloads_key = f"{namespace}:payloads:{queue_name}"
         self.claim_script = self.redis.register_script(_CLAIM_LUA)
         self.renew_script = self.redis.register_script(_RENEW_LUA)
         self.ack_script = self.redis.register_script(_ACK_LUA)
@@ -99,8 +101,8 @@ class RedisJobQueue:
             "payload": payload,
             "queue": job.queue,
         }, sort_keys=True))
-        pipe.hset(f"{self.namespace}:scores", job.job_id, self._score(job))
-        pipe.hset(f"{self.namespace}:payloads", job.job_id, payload)
+        pipe.hset(self.scores_key, job.job_id, self._score(job))
+        pipe.hset(self.payloads_key, job.job_id, payload)
         pipe.zadd(self.ready_key, {job.job_id: self._score(job)})
         pipe.execute()
         return job.job_id
@@ -130,7 +132,7 @@ class RedisJobQueue:
             return None
         if isinstance(job_id, bytes):
             job_id = job_id.decode()
-        payload = self.redis.hget(f"{self.namespace}:payloads", job_id)
+        payload = self.redis.hget(self.payloads_key, job_id)
         if payload is None:
             self.ack(job_id)
             return None
@@ -159,7 +161,7 @@ class RedisJobQueue:
 
     def requeue_expired(self, limit: int = 100) -> list[str]:
         ids = self.requeue_script(
-            keys=[self.lease_key, self.inflight_key, self.meta_key, f"{self.namespace}:scores", self.ready_key],
+            keys=[self.lease_key, self.inflight_key, self.meta_key, self.scores_key, self.ready_key],
             args=[limit],
         )
         return [
