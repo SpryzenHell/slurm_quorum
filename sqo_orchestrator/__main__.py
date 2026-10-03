@@ -28,6 +28,7 @@ sv.add_argument("--s3-bucket")
 sv.add_argument("--s3-prefix", default="slurm-quorum")
 sv.add_argument("--s3-endpoint-url")
 sv.add_argument("--s3-region")
+sv.add_argument("--s3-force-path-style", action="store_true")
 
 a = p.parse_args()
 
@@ -74,4 +75,5 @@ else:
         s3_prefix=a.s3_prefix,
         s3_endpoint_url=a.s3_endpoint_url,
         s3_region=a.s3_region,
+        s3_force_path_style=a.s3_force_path_style,
     ).serve()
