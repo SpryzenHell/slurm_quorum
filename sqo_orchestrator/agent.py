@@ -83,9 +83,11 @@ class RedisSlurmAgent:
                     requeue=should_retry,
                     c=c,
                 )
-            if should_retry:
-                self.queue.enqueue(job)
             self.queue.ack(job.job_id, self.controller.worker_id)
+            if should_retry:
+                retry_job = JobSpec.from_json(row["payload"])
+                retry_job.metadata["sqo_attempt"] = int(row["attempts"]) + 1
+                self.queue.enqueue(retry_job)
             raise
 
     def reconcile_once(self):
@@ -96,7 +98,9 @@ class RedisSlurmAgent:
             if not success and should_retry:
                 row = self.db.get_job(job_id)
                 if row is not None:
-                    self.queue.enqueue(JobSpec.from_json(row["payload"]))
+                    retry_job = JobSpec.from_json(row["payload"])
+                    retry_job.metadata["sqo_attempt"] = int(row["attempts"]) + 1
+                    self.queue.enqueue(retry_job)
         return results
 
     def reap_expired_claims(self):
