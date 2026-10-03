@@ -16,6 +16,7 @@ SQO_LEASE_TTL_S=4 SQO_ELECTION_MIN_S=1 SQO_ELECTION_MAX_S=2 SQO_NODE_ID=node-1 p
 SQO_LEASE_TTL_S=4 SQO_ELECTION_MIN_S=1 SQO_ELECTION_MAX_S=2 SQO_NODE_ID=node-2 python -m sqo_orchestrator serve --root "$ROOT" --bind 127.0.0.1:8112 --peers '{"node-1":"http://127.0.0.1:8111","node-3":"http://127.0.0.1:8113"}' >"$ROOT/node2.log" 2>&1 & P2=$!
 SQO_LEASE_TTL_S=4 SQO_ELECTION_MIN_S=1 SQO_ELECTION_MAX_S=2 SQO_NODE_ID=node-3 python -m sqo_orchestrator serve --root "$ROOT" --bind 127.0.0.1:8113 --peers '{"node-1":"http://127.0.0.1:8111","node-2":"http://127.0.0.1:8112"}' >"$ROOT/node3.log" 2>&1 & P3=$!
 
+export P1 P2 P3
 python - <<'PY'
 import json, os, signal, time, urllib.request
 
@@ -58,6 +59,6 @@ for _ in range(90):
     time.sleep(.2)
 if new_leader is None:
     raise SystemExit("leader failover did not converge")
-if new_leader["node_id"] == states[0].get("node_id"):
-    pass
+if new_leader["node_id"] == leader_id:
+    raise SystemExit("failed leader reclaimed leadership unexpectedly")
 PY
