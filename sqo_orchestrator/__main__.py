@@ -11,6 +11,9 @@ l = s.add_parser("load")
 l.add_argument("--jobs", type=int, default=60000)
 l.add_argument("--workers", type=int, default=8)
 l.add_argument("--root", type=Path, default=Path(".sqo/load"))
+l.add_argument("--s3-bucket")
+l.add_argument("--s3-prefix", default="slurm-quorum")
+l.add_argument("--s3-telemetry-prefix")
 
 f = s.add_parser("failover")
 f.add_argument("--root", type=Path, default=Path(".sqo/failover"))
@@ -27,7 +30,12 @@ sv.add_argument("--s3-prefix", default="slurm-quorum")
 a = p.parse_args()
 
 if a.cmd == "load":
-    o = Orchestrator(a.root)
+    o = Orchestrator(
+        a.root,
+        s3_bucket=a.s3_bucket,
+        s3_prefix=a.s3_prefix,
+        s3_telemetry_prefix=a.s3_telemetry_prefix,
+    )
     if not o.acquire_master():
         raise SystemExit("could not acquire local master fencing lease")
     print(json.dumps(o.load(a.jobs, a.workers), indent=2, sort_keys=True))
