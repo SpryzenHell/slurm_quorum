@@ -14,6 +14,9 @@ l.add_argument("--root", type=Path, default=Path(".sqo/load"))
 l.add_argument("--s3-bucket")
 l.add_argument("--s3-prefix", default="slurm-quorum")
 l.add_argument("--s3-telemetry-prefix")
+l.add_argument("--s3-endpoint-url")
+l.add_argument("--s3-region")
+l.add_argument("--s3-force-path-style", action="store_true")
 
 f = s.add_parser("failover")
 f.add_argument("--root", type=Path, default=Path(".sqo/failover"))
@@ -38,6 +41,9 @@ if a.cmd == "load":
         s3_bucket=a.s3_bucket,
         s3_prefix=a.s3_prefix,
         s3_telemetry_prefix=a.s3_telemetry_prefix,
+        s3_endpoint_url=a.s3_endpoint_url,
+        s3_region=a.s3_region,
+        s3_force_path_style=a.s3_force_path_style,
     )
     if not o.acquire_master():
         raise SystemExit("could not acquire local master fencing lease")
