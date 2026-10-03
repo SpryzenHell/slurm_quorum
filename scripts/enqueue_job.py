@@ -15,6 +15,10 @@ p.add_argument('--namespace', default='sqo')
 p.add_argument('--job-id', default=None)
 p.add_argument('--priority', type=int, default=0)
 p.add_argument('--gpus', type=int, default=0)
+p.add_argument('--gpu-type')
+p.add_argument('--partition')
+p.add_argument('--qos')
+p.add_argument('--constraint')
 p.add_argument('--cpus', type=int, default=1)
 p.add_argument('--memory-mb', type=int, default=1024)
 p.add_argument('--time-limit-s', type=int, default=3600)
@@ -28,6 +32,10 @@ job = JobSpec(
     queue=args.queue,
     priority=args.priority,
     gpus=args.gpus,
+    gpu_type=args.gpu_type,
+    partition=args.partition,
+    qos=args.qos,
+    constraint=args.constraint,
     cpus=args.cpus,
     memory_mb=args.memory_mb,
     time_limit_s=args.time_limit_s,
