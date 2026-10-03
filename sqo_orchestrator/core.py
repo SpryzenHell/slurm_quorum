@@ -255,19 +255,28 @@ class S3Lease:
     def acquire(self,resource,owner,term,ttl_s):
         import botocore.exceptions
         k=self._key(resource); rec=LeaseRecord(owner,term,time.time()+ttl_s,uuid.uuid4().hex)
-        try:
-            self.client.put_object(Bucket=self.bucket,Key=k,Body=json.dumps(asdict(rec)).encode(),ContentType='application/json',IfNoneMatch='*'); return rec
-        except botocore.exceptions.ClientError as e:
-            if e.response.get('Error',{}).get('Code') not in {'PreconditionFailed','412'}:raise
-        cur=self._read(k)
-        if cur and cur[0].get('expires_at',0)<=time.time():
+        for _ in range(3):
+            try:
+                self.client.put_object(
+                    Bucket=self.bucket,
+                    Key=k,
+                    Body=json.dumps(asdict(rec)).encode(),
+                    ContentType='application/json',
+                    IfNoneMatch='*',
+                )
+                return rec
+            except botocore.exceptions.ClientError as exc:
+                code = exc.response.get('Error', {}).get('Code')
+                if code not in {'PreconditionFailed', '412', 'Conflict', '409'}:
+                    raise
+            cur=self._read(k)
+            if cur is None:
+                continue
+            if cur[0].get('expires_at',0) > time.time():
+                return None
             _, etag = cur
             try:
                 self.client.delete_object(Bucket=self.bucket,Key=k,IfMatch=etag)
-            except botocore.exceptions.ClientError:
-                return None
-            try:
-                self.client.put_object(Bucket=self.bucket,Key=k,Body=json.dumps(asdict(rec)).encode(),ContentType='application/json',IfNoneMatch='*'); return rec
             except botocore.exceptions.ClientError:
                 return None
         return None
