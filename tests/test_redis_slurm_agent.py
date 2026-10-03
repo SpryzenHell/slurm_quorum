@@ -38,3 +38,30 @@ def test_redis_claim_is_recorded_locally_and_acked(tmp_path):
     result = agent.reconcile_once()
     assert result == [("j1", True, "COMPLETED")]
     assert db.get_job("j1")["state"] == "succeeded"
+
+
+def test_retryable_slurm_failure_returns_to_redis(tmp_path):
+    redis = fakeredis.FakeRedis()
+    queue = RedisJobQueue(redis, queue_name="gpu")
+    db = NodeDB(tmp_path / "db.sqlite", "node-1")
+
+    class FailingSlurm:
+        def submit(self, job):
+            return "9002"
+
+        def status(self, scheduler_id):
+            from sqo_orchestrator.slurm import SlurmStatus
+            return SlurmStatus(scheduler_id, "FAILED", "1:0")
+
+    job = JobSpec(job_id="retry-1", command=["false"], queue="gpu", retries=1)
+    queue.enqueue(job)
+
+    slurm = FailingSlurm()
+    controller = SlurmController(db, slurm, "worker-1")
+    agent = RedisSlurmAgent(queue, db, controller)
+
+    assert agent.dispatch_once() == "9002"
+    result = agent.reconcile_once()
+    assert result[0][3] is True
+    assert queue.depth() == 1
+    assert db.get_job("retry-1")["state"] == "retry"
