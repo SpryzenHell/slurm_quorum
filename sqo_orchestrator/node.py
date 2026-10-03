@@ -52,7 +52,9 @@ class NodeRuntime:
                 if self.path=="/raft/request-vote":
                     ok=runtime.consensus.request_vote(data["candidate_id"],int(data["term"])); self.reply(200,{"voter_id":runtime.node_id,"term":runtime.consensus.term,"granted":ok})
                 elif self.path=="/raft/append-entries":
-                    ok=runtime.consensus.append_entries(int(data["term"]),data["leader_id"]); runtime.deadline=runtime.deadline; self.reply(200,{"follower_id":runtime.node_id,"term":runtime.consensus.term,"accepted":ok})
+                    ok=runtime.consensus.append_entries(int(data["term"]),data["leader_id"])
+                    runtime.deadline=time.monotonic()+random.uniform(*runtime.election)
+                    self.reply(200,{"follower_id":runtime.node_id,"term":runtime.consensus.term,"accepted":ok})
                 else:self.reply(404,{"error":"not found"})
             def log_message(self,*_):pass
         self.server=ThreadingHTTPServer((self.host,self.port),H)
