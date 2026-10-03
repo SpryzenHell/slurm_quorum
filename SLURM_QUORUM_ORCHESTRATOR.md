@@ -18,7 +18,7 @@ This is the active orchestration layer for the requested resume project, kept se
     bash scripts/run_failover_demo.sh
     bash scripts/benchmark_60k.sh 60000 8
 
-The latest verified local 60K run completed all 60,000 synthetic jobs with 8 workers and replicated 180,000 job events to telemetry. The measured throughput was approximately 9.4K jobs/s on the development environment. This is not a DGX-cluster production number.
+The latest verified local 60K run completed all 60,000 synthetic jobs with 8 workers and replicated 180,000 job events to telemetry. The measured throughput was approximately 9.23K jobs/s on the development environment. This is not a DGX-cluster production number.
 
 ## Upstream composition
 
