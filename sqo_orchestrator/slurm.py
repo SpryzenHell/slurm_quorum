@@ -140,8 +140,6 @@ class SlurmClient:
                 rows.append(parts)
                 if parts[2].strip() == comment:
                     return parts[0].strip()
-        if len(rows) == 1:
-            return rows[0][0].strip()
         return None
 
     def submit(self, job: JobSpec) -> str:
