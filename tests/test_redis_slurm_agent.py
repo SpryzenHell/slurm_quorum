@@ -64,6 +64,10 @@ def test_retryable_slurm_failure_returns_to_redis(tmp_path):
     result = agent.reconcile_once()
     assert result[0][3] is True
     assert queue.depth() == 1
+    retry_claim = queue.claim("worker-2", lease_s=30)
+    assert retry_claim is not None
+    assert retry_claim.job.metadata["sqo_attempt"] == 2
+    queue.ack("retry-1", "worker-2")
     assert db.get_job("retry-1")["state"] == "retry"
 
 
@@ -89,5 +93,9 @@ def test_retryable_submit_failure_returns_job_to_redis(tmp_path):
         raise AssertionError("expected submission failure")
 
     assert queue.depth() == 1
+    retry_claim = queue.claim("worker-2", lease_s=30)
+    assert retry_claim is not None
+    assert retry_claim.job.metadata["sqo_attempt"] == 2
+    queue.ack("submit-retry", "worker-2")
     assert queue.inflight() == 0
     assert db.get_job("submit-retry")["state"] == "retry"
