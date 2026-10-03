@@ -360,14 +360,14 @@ class TelemetryReplicator:
                     'node_id':r['node_id'],'kind':r['kind'],'job_id':r['job_id'],
                     'payload':json.loads(r['payload']),
                 })
+            flush_sink=getattr(self.sink,'flush',None)
+            if flush_sink is not None:
+                flush_sink()
             self.cursor=rows[-1]['seq']
             self.db.set_meta('telemetry.cursor',str(self.cursor))
             total+=len(rows)
             if len(rows)<1000:
                 break
-        flush_sink=getattr(self.sink,'flush',None)
-        if flush_sink is not None:
-            flush_sink()
         return total
 
 class SlurmBackend:
