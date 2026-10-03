@@ -19,12 +19,16 @@ class S3TelemetrySink:
         batch_size: int = 1000,
         endpoint_url: str | None = None,
         region_name: str | None = None,
+        force_path_style: bool = False,
     ):
         if client is None:
             import boto3
             kwargs = {}
             if endpoint_url: kwargs["endpoint_url"] = endpoint_url
             if region_name: kwargs["region_name"] = region_name
+            if force_path_style:
+                from botocore.config import Config
+                kwargs["config"] = Config(s3={"addressing_style":"path"})
             client = boto3.client("s3", **kwargs)
         self.client = client
         self.bucket = bucket
