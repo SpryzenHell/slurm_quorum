@@ -26,7 +26,7 @@ for _ in range(80):
         for port in ports:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=.3) as r:
                 states.append(json.loads(r.read()))
-        leaders=[s for s in states if s["state"]=="leader"]
+        leaders=[s for s in states if s["role"]=="leader"]
         if len(leaders)==1:
             print(json.dumps({"cluster":states,"leader":leaders[0]},indent=2,sort_keys=True))
             raise SystemExit(0)
