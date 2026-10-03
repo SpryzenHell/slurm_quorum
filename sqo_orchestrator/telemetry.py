@@ -17,10 +17,15 @@ class S3TelemetrySink:
         prefix: str = "slurm-quorum/telemetry",
         client=None,
         batch_size: int = 1000,
+        endpoint_url: str | None = None,
+        region_name: str | None = None,
     ):
         if client is None:
             import boto3
-            client = boto3.client("s3")
+            kwargs = {}
+            if endpoint_url: kwargs["endpoint_url"] = endpoint_url
+            if region_name: kwargs["region_name"] = region_name
+            client = boto3.client("s3", **kwargs)
         self.client = client
         self.bucket = bucket
         self.prefix = prefix.rstrip("/")
