@@ -34,8 +34,6 @@ class S3TelemetrySink:
 
     def append(self, event: dict):
         self.buffer.append(event)
-        if len(self.buffer) >= self.batch_size:
-            self.flush()
 
     def flush(self):
         if not self.buffer:
@@ -45,14 +43,25 @@ class S3TelemetrySink:
             for event in self.buffer
         )
         compressed = gzip.compress(payload, mtime=0)
-        stamp = int(time.time() * 1_000_000)
-        key = f"{self.prefix}/segment-{stamp}-{uuid.uuid4().hex[:12]}-{len(self.buffer)}.jsonl.gz"
-        self.client.put_object(
-            Bucket=self.bucket,
-            Key=key,
-            Body=compressed,
-            ContentType="application/gzip",
-        )
+        sequences = [event.get("seq") for event in self.buffer]
+        numeric = [int(seq) for seq in sequences if isinstance(seq, int)]
+        if numeric and len(numeric) == len(self.buffer):
+            key = f"{self.prefix}/segment-{numeric[0]}-{numeric[-1]}-{len(self.buffer)}.jsonl.gz"
+        else:
+            stamp = int(time.time() * 1_000_000)
+            key = f"{self.prefix}/segment-{stamp}-{uuid.uuid4().hex[:12]}-{len(self.buffer)}.jsonl.gz"
+        try:
+            self.client.put_object(
+                Bucket=self.bucket,
+                Key=key,
+                Body=compressed,
+                ContentType="application/gzip",
+                IfNoneMatch="*",
+            )
+        except Exception as exc:
+            code = getattr(getattr(exc, "response", {}), "get", lambda *_: None)("Error", {}).get("Code") if hasattr(exc, "response") else None
+            if code not in {"PreconditionFailed", "412"}:
+                raise
         count = len(self.buffer)
         self.buffer.clear()
         return key, count
