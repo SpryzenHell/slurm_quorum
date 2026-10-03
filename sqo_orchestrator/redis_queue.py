@@ -62,7 +62,7 @@ for _, job_id in ipairs(ids) do
   if meta then
     local score = redis.call('HGET', KEYS[4], job_id)
     redis.call('ZREM', KEYS[1], job_id)
-    redis.call('ZREM', KEYS[2], job_id)
+    redis.call('HDEL', KEYS[2], job_id)
     if score then redis.call('ZADD', KEYS[5], tonumber(score), job_id) end
   end
 end
@@ -120,8 +120,8 @@ class RedisJobQueue:
                 job.job_id,
                 json.dumps({"payload": payload, "queue": job.queue}, sort_keys=True),
             )
-            pipe.hset(f"{self.namespace}:scores", job.job_id, self._score(job))
-            pipe.hset(f"{self.namespace}:payloads", job.job_id, payload)
+            pipe.hset(self.scores_key, job.job_id, self._score(job))
+            pipe.hset(self.payloads_key, job.job_id, payload)
             pipe.zadd(self.ready_key, {job.job_id: self._score(job)})
         pipe.execute()
         return len(jobs)
