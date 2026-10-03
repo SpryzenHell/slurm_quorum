@@ -27,8 +27,10 @@ services:
       - minio
     entrypoint: ['/bin/sh', '-c']
     command: >-
-      'until mc alias set local http://minio:9000 sqo-minio sqo-minio-password; do sleep 2; done;
-       mc mb --ignore-existing local/sqo; exit 0'
+      until mc alias set local http://minio:9000 sqo-minio sqo-minio-password;
+      do sleep 2; done;
+      mc mb --ignore-existing local/sqo;
+      exit 0
 
   sqo-agent:
     build:
