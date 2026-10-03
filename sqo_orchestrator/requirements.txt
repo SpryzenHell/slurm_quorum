@@ -1,3 +1,7 @@
-# Optional production integrations
+# Runtime integrations
 boto3>=1.35
 redis>=5.0
+
+# Test-only helpers
+fakeredis>=2.26
+pytest>=8
