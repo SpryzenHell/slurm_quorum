@@ -243,12 +243,15 @@ class FileLease:
         except FileNotFoundError:return False
 
 class S3Lease:
-    def __init__(self,bucket,prefix='slurm-quorum',client=None,endpoint_url=None,region_name=None):
+    def __init__(self,bucket,prefix='slurm-quorum',client=None,endpoint_url=None,region_name=None,force_path_style=False):
         if client is None:
             import boto3
             kwargs={}
             if endpoint_url: kwargs["endpoint_url"]=endpoint_url
             if region_name: kwargs["region_name"]=region_name
+            if force_path_style:
+                from botocore.config import Config
+                kwargs["config"]=Config(s3={"addressing_style":"path"})
             client=boto3.client('s3',**kwargs)
         self.client=client; self.bucket=bucket; self.prefix=prefix.rstrip('/')
     def _key(self,r):return f'{self.prefix}/locks/{r.replace("/","_")}.json'
