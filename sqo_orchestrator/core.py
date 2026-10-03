@@ -146,10 +146,15 @@ class S3Lease:
             if e.response.get('Error',{}).get('Code') not in {'PreconditionFailed','412'}:raise
         cur=self._read(k)
         if cur and cur[0].get('expires_at',0)<=time.time():
-            self.client.delete_object(Bucket=self.bucket,Key=k)
+            _, etag = cur
+            try:
+                self.client.delete_object(Bucket=self.bucket,Key=k,IfMatch=etag)
+            except botocore.exceptions.ClientError:
+                return None
             try:
                 self.client.put_object(Bucket=self.bucket,Key=k,Body=json.dumps(asdict(rec)).encode(),ContentType='application/json',IfNoneMatch='*'); return rec
-            except botocore.exceptions.ClientError:return None
+            except botocore.exceptions.ClientError:
+                return None
         return None
     def renew(self,resource,owner,term,ttl_s):
         import botocore.exceptions
@@ -164,7 +169,12 @@ class S3Lease:
     def release(self,resource,owner,term):
         cur=self._read(self._key(resource))
         if not cur or cur[0].get('owner')!=owner or int(cur[0].get('term',-1))!=term:return False
-        self.client.delete_object(Bucket=self.bucket,Key=self._key(resource)); return True
+        _, etag = cur
+        try:
+            self.client.delete_object(Bucket=self.bucket,Key=self._key(resource),IfMatch=etag)
+        except Exception:
+            return False
+        return True
 
 class ConsensusNode:
     def __init__(self,node_id,peers,db):
