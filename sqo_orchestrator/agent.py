@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from .core import NodeDB, SlurmController
+from .core import JobSpec, NodeDB, SlurmController
 
 
 class SlurmAgent:
@@ -87,7 +87,15 @@ class RedisSlurmAgent:
             raise
 
     def reconcile_once(self):
-        return self.controller.reconcile()
+        results = self.controller.reconcile()
+        for result in results:
+            job_id, success = result[0], result[1]
+            should_retry = len(result) > 3 and bool(result[3])
+            if not success and should_retry:
+                row = self.db.get_job(job_id)
+                if row is not None:
+                    self.queue.enqueue(JobSpec.from_json(row["payload"]))
+        return results
 
     def reap_expired_claims(self):
         return self.queue.requeue_expired()
