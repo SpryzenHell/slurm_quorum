@@ -6,13 +6,18 @@ from .core import NodeDB, ConsensusNode, FileLease
 
 class NodeRuntime:
     """Small HTTP transport around ConsensusNode for a real 3-process local/cluster deployment."""
-    def __init__(self, node_id, bind, peers, state_dir=".sqo/state", lease_dir=".sqo/leases", lease_ttl=8.0, election=(2.0,4.0), s3_bucket=None, s3_prefix="slurm-quorum"):
+    def __init__(self, node_id, bind, peers, state_dir=".sqo/state", lease_dir=".sqo/leases", lease_ttl=8.0, election=(2.0,4.0), s3_bucket=None, s3_prefix="slurm-quorum", s3_endpoint_url=None, s3_region=None):
         host, port = bind.rsplit(":",1)
         self.node_id=node_id; self.host=host; self.port=int(port); self.peers=peers; self.lease_ttl=lease_ttl; self.election=election
         self.db=NodeDB(f"{state_dir}/{node_id}.db",node_id); self.consensus=ConsensusNode(node_id,list(peers),self.db)
         if s3_bucket:
             from .core import S3Lease
-            self.lease=S3Lease(s3_bucket,s3_prefix)
+            self.lease=S3Lease(
+                s3_bucket,
+                s3_prefix,
+                endpoint_url=s3_endpoint_url,
+                region_name=s3_region,
+            )
         else:
             self.lease=FileLease(lease_dir)
         self.deadline=time.monotonic()+random.uniform(*election); self.stop=threading.Event(); self.server=None
