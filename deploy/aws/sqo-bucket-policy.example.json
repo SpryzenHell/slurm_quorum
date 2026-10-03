@@ -9,10 +9,8 @@
       "Resource": "arn:aws:s3:::YOUR_BUCKET/slurm-quorum/locks/*",
       "Condition": {
         "Null": {
-          "s3:if-none-match": "true"
-        },
-        "StringNotEqualsIgnoreCase": {
-          "s3:if-match": "*"
+          "s3:if-none-match": "true",
+          "s3:if-match": "true"
         }
       }
     },
