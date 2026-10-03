@@ -15,6 +15,6 @@ Latest local evidence:
 - 8 worker threads.
 - 60,000 successful completions.
 - 180,000 job events replicated.
-- 9,369 jobs/s measured on the current development environment.
+- 9,231 jobs/s measured on the current development environment.
 
 That local benchmark supports “60K workloads demonstrated” but does not establish “60K monthly HPC workloads across DGX clusters.” That stronger statement should be retained only with real cluster records.
