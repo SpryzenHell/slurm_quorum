@@ -33,7 +33,10 @@ local owner = redis.call('HGET', KEYS[1], ARGV[1])
 if not owner or owner ~= ARGV[2] then
   return 0
 end
-redis.call('ZADD', KEYS[2], tonumber(ARGV[3]), ARGV[1])
+local now = redis.call('TIME')
+local now_s = tonumber(now[1]) + (tonumber(now[2]) / 1000000)
+local expiry = now_s + tonumber(ARGV[3])
+redis.call('ZADD', KEYS[2], expiry, ARGV[1])
 return 1
 """
 
@@ -147,7 +150,7 @@ class RedisJobQueue:
     def renew(self, job_id: str, worker_id: str, lease_s: float = 30.0) -> bool:
         result = self.renew_script(
             keys=[self.inflight_key, self.lease_key],
-            args=[job_id, worker_id, time.time() + lease_s],
+            args=[job_id, worker_id, lease_s],
         )
         return int(result or 0) == 1
 
