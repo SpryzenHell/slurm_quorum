@@ -32,7 +32,9 @@ class NodeRuntime:
         self.consensus.become_candidate(); term=self.consensus.term; votes=1
         for peer,url in self.peers.items():
             r=self.post(url,"/raft/request-vote",{"candidate_id":self.node_id,"term":term})
-            if r and int(r.get("term",0))>term:self.consensus.append_entries(int(r["term"]),r.get("voter_id","")); return
+            if r and int(r.get("term",0))>term:
+                self.consensus.update_term(int(r["term"]))
+                return
             if r and r.get("granted"):votes+=1
         if votes >= (len(self.peers)+1)//2+1:
             if self.lease.acquire("cluster-master",self.node_id,term,self.lease_ttl):
