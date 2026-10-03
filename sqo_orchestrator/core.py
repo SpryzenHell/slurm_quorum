@@ -35,7 +35,8 @@ PRAGMA busy_timeout=5000;
 CREATE TABLE IF NOT EXISTS jobs(
  job_id TEXT PRIMARY KEY,payload TEXT NOT NULL,state TEXT NOT NULL,priority INTEGER NOT NULL,
  attempts INTEGER NOT NULL DEFAULT 0,owner TEXT,queued_at REAL NOT NULL,started_at REAL,
- heartbeat_at REAL,finished_at REAL,result TEXT,error TEXT);
+ heartbeat_at REAL,finished_at REAL,result TEXT,error TEXT,
+ scheduler_id TEXT,slurm_state TEXT,slurm_exit_code TEXT);
 CREATE INDEX IF NOT EXISTS idx_jobs_ready ON jobs(state,priority DESC,queued_at ASC);
 CREATE TABLE IF NOT EXISTS events(
  seq INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT UNIQUE NOT NULL,ts REAL NOT NULL,node_id TEXT NOT NULL,
@@ -50,7 +51,16 @@ class NodeDB:
         c=sqlite3.connect(self.path,timeout=5,isolation_level=None); c.row_factory=sqlite3.Row
         c.execute('PRAGMA busy_timeout=5000'); c.execute('PRAGMA journal_mode=WAL'); c.execute('PRAGMA synchronous=NORMAL'); return c
     def _init(self):
-        with self.connect() as c: c.executescript(SCHEMA)
+        with self.connect() as c:
+            c.executescript(SCHEMA)
+            columns = {row[1] for row in c.execute("PRAGMA table_info(jobs)")}
+            for name, ddl in (
+                ("scheduler_id", "TEXT"),
+                ("slurm_state", "TEXT"),
+                ("slurm_exit_code", "TEXT"),
+            ):
+                if name not in columns:
+                    c.execute("ALTER TABLE jobs ADD COLUMN " + name + " " + ddl)
     def _event(self,c,kind,job_id,payload):
         eid=uuid.uuid4().hex; c.execute('INSERT INTO events VALUES(NULL,?,?,?,?,?,?)',(eid,time.time(),self.node_id,kind,job_id,json.dumps(payload,sort_keys=True))); return eid
     def submit_many(self,jobs):
@@ -77,6 +87,43 @@ class NodeDB:
         st=JobState.RETRY if requeue else JobState.FAILED; c.execute('BEGIN IMMEDIATE'); cur=c.execute('UPDATE jobs SET state=?,error=?,finished_at=?,heartbeat_at=NULL WHERE job_id=? AND owner=? AND state=?',(st,error[:4000],time.time(),job_id,worker_id,JobState.RUNNING))
         if cur.rowcount:self._event(c,'job.retry' if requeue else 'job.failed',job_id,{'error':error[:4000]})
         c.execute('COMMIT'); return cur.rowcount==1
+    def attach_scheduler(self, job_id, scheduler_id):
+        with self.connect() as c:
+            c.execute("BEGIN IMMEDIATE")
+            cur = c.execute(
+                "UPDATE jobs SET scheduler_id=? WHERE job_id=? AND state=?",
+                (scheduler_id, job_id, JobState.RUNNING),
+            )
+            if cur.rowcount:
+                self._event(c, "slurm.submitted", job_id, {"scheduler_id": scheduler_id})
+            c.execute("COMMIT")
+            return cur.rowcount == 1
+
+    def set_slurm_status(self, job_id, scheduler_id, state, exit_code=None):
+        with self.connect() as c:
+            c.execute("BEGIN IMMEDIATE")
+            cur = c.execute(
+                "UPDATE jobs SET scheduler_id=?,slurm_state=?,slurm_exit_code=? WHERE job_id=?",
+                (scheduler_id, state, exit_code, job_id),
+            )
+            if cur.rowcount:
+                self._event(
+                    c,
+                    "slurm.status",
+                    job_id,
+                    {"scheduler_id": scheduler_id, "state": state, "exit_code": exit_code},
+                )
+            c.execute("COMMIT")
+            return cur.rowcount == 1
+
+    def slurm_jobs(self):
+        with self.connect() as c:
+            return c.execute(
+                "SELECT job_id,payload,owner,scheduler_id,slurm_state,slurm_exit_code,attempts "
+                "FROM jobs WHERE state=? AND scheduler_id IS NOT NULL",
+                (JobState.RUNNING,),
+            ).fetchall()
+
     def counts(self):
         with self.connect() as c:return {r['state']:int(r['n']) for r in c.execute('SELECT state,COUNT(*) n FROM jobs GROUP BY state')}
     def pending(self):
@@ -242,6 +289,36 @@ class SlurmBackend:
         try:o=subprocess.check_output(['sbatch',p],text=True)
         finally:os.unlink(p)
         return {'job_id':job.job_id,'scheduler_id':o.strip().split()[-1]}
+
+class SlurmController:
+    def __init__(self, db, client, worker_id):
+        self.db = db
+        self.client = client
+        self.worker_id = worker_id
+
+    def submit_claimed(self, job):
+        scheduler_id = self.client.submit(job)
+        if not self.db.attach_scheduler(job.job_id, scheduler_id):
+            raise RuntimeError(
+                f"job {job.job_id} lost ownership before Slurm submission was recorded"
+            )
+        return scheduler_id
+
+    def reconcile(self):
+        from .slurm import TERMINAL_FAILURE, TERMINAL_SUCCESS
+        finished = []
+        for row in self.db.slurm_jobs():
+            status = self.client.status(row["scheduler_id"])
+            if status is None:
+                continue
+            self.db.set_slurm_status(
+                row["job_id"], row["scheduler_id"], status.state, status.exit_code
+            )
+            if status.state in TERMINAL_SUCCESS:
+                finished.append((row["job_id"], True))
+            elif status.state in TERMINAL_FAILURE:
+                finished.append((row["job_id"], False))
+        return finished
 
 class Orchestrator:
     def __init__(self,root,node_id='node-1',nodes=None,lease_ttl_s=8):
