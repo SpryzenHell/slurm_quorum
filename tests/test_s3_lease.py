@@ -16,6 +16,7 @@ class FakeS3:
         self.obj = None
         self.counter = 0
         self.reads = 0
+        self.race_on_next_read = False
 
     def put_object(self, **kwargs):
         if kwargs.get("IfNoneMatch") == "*" and self.obj is not None:
@@ -31,7 +32,8 @@ class FakeS3:
             raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
         self.reads += 1
         current = {"Body": FakeBody(self.obj["body"]), "ETag": self.obj["etag"]}
-        if self.reads == 2:
+        if self.race_on_next_read:
+            self.race_on_next_read = False
             self.counter += 1
             self.obj = {"body": b'{"owner":"other","term":99,"expires_at":9999999999,"fencing_token":"fresh"}', "etag": f"etag-{self.counter}"}
         return current
@@ -64,6 +66,7 @@ def test_expired_takeover_is_etag_fenced():
 
     # The fake S3 changes the object after the contender reads the expired lease
     # but before it tries the conditional delete. A safe implementation must abort.
+    client.race_on_next_read = True
     assert lease.acquire("cluster", "node-2", 2, 60) is None
 
 
