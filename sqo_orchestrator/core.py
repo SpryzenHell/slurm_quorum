@@ -159,7 +159,7 @@ class NodeDB:
                 (JobState.RUNNING,),
             ).fetchall()
 
-    def finalize_slurm(self, job_id, scheduler_id, success, exit_code=None, error=None, requeue=False):
+    def finalize_slurm(self, job_id, scheduler_id, success, exit_code=None, error=None, requeue=False, slurm_state=None):
         state = JobState.SUCCEEDED if success else (JobState.RETRY if requeue else JobState.FAILED)
         with self.connect() as c:
             c.execute("BEGIN IMMEDIATE")
@@ -169,7 +169,7 @@ class NodeDB:
                 (
                     state,
                     scheduler_id if success else None,
-                    "COMPLETED" if success else "FAILED",
+                    slurm_state or ("COMPLETED" if success else "FAILED"),
                     exit_code,
                     time.time(),
                     error[:4000] if error else None,
@@ -230,7 +230,10 @@ class FileLease:
         try:cur=json.loads(p.read_text())
         except (FileNotFoundError,json.JSONDecodeError):return None
         if cur.get('owner')!=owner or int(cur.get('term',-1))!=term:return None
-        cur['expires_at']=time.time()+ttl_s; p.write_text(json.dumps(cur,sort_keys=True)); return LeaseRecord(**cur)
+        if cur.get('expires_at', 0) <= time.time(): return None
+        cur['expires_at']=time.time()+ttl_s
+        p.write_text(json.dumps(cur,sort_keys=True))
+        return LeaseRecord(**cur)
     def release(self,resource,owner,term):
         p=self._p(resource)
         try:cur=json.loads(p.read_text())
@@ -286,6 +289,7 @@ class S3Lease:
         if not cur:return None
         data,etag=cur
         if data.get('owner')!=owner or int(data.get('term',-1))!=term:return None
+        if data.get('expires_at', 0) <= time.time(): return None
         data['expires_at']=time.time()+ttl_s
         try:self.client.put_object(Bucket=self.bucket,Key=k,Body=json.dumps(data).encode(),ContentType='application/json',IfMatch=etag)
         except botocore.exceptions.ClientError:return None
@@ -411,7 +415,8 @@ class SlurmController:
             )
             if status.state in TERMINAL_SUCCESS:
                 self.db.finalize_slurm(
-                    row["job_id"], row["scheduler_id"], True, status.exit_code
+                    row["job_id"], row["scheduler_id"], True, status.exit_code,
+                    slurm_state=status.state,
                 )
                 finished.append((row["job_id"], True, status.state))
             elif status.state in TERMINAL_FAILURE:
@@ -424,6 +429,7 @@ class SlurmController:
                     status.exit_code,
                     error=status.state,
                     requeue=should_retry,
+                    slurm_state=status.state,
                 )
                 finished.append((row["job_id"], False, status.state, should_retry))
         return finished
