@@ -83,6 +83,8 @@ class RedisSlurmAgent:
                     requeue=should_retry,
                     c=c,
                 )
+            if should_retry:
+                self.queue.enqueue(job)
             self.queue.ack(job.job_id, self.controller.worker_id)
             raise
 
