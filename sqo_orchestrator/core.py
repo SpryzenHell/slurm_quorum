@@ -314,6 +314,16 @@ class ConsensusNode:
         self.node_id=node_id; self.peers=[p for p in peers if p!=node_id]; self.db=db
         self.term=int(db.get_meta('raft.term') or 0); self.voted_for=db.get_meta('raft.vote') or None; self.role='follower'; self.leader_id=None
     def _persist(self):self.db.set_meta('raft.term',str(self.term)); self.db.set_meta('raft.vote',self.voted_for or '')
+    def update_term(self, term):
+        if term <= self.term:
+            return False
+        self.term = term
+        self.voted_for = None
+        self.role = 'follower'
+        self.leader_id = None
+        self._persist()
+        return True
+
     def request_vote(self,candidate,term):
         if term<self.term:return False
         if term>self.term:self.term=term; self.voted_for=None; self.role='follower'; self._persist()
