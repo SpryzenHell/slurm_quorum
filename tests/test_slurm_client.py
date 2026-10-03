@@ -20,7 +20,7 @@ def test_parse_parsable_id_rejects_unexpected_output():
 def test_squeue_lookup_uses_full_comment(monkeypatch):
     client = SlurmClient(partition='gpu', dry_run=False)
     job = JobSpec(job_id='abc123', command=['true'])
-    client.available = staticmethod(lambda: True)
+    monkeypatch.setattr(SlurmClient, 'available', staticmethod(lambda: True))
 
     calls = []
     def fake_check_output(args, **kwargs):
