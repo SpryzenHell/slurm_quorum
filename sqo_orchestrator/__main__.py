@@ -60,4 +60,6 @@ else:
         lease_ttl=float(os.environ.get("SQO_LEASE_TTL_S", "8")),
         election=(float(os.environ.get("SQO_ELECTION_MIN_S", "2")),
                   float(os.environ.get("SQO_ELECTION_MAX_S", "4"))),
+        s3_bucket=a.s3_bucket,
+        s3_prefix=a.s3_prefix,
     ).serve()
