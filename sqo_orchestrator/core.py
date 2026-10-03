@@ -17,9 +17,13 @@ class JobSpec:
     queue: str = 'default'
     priority: int = 0
     gpus: int = 0
+    gpu_type: str | None = None
     cpus: int = 1
     memory_mb: int = 1024
     time_limit_s: int = 3600
+    partition: str | None = None
+    qos: str | None = None
+    constraint: str | None = None
     env: dict[str,str] = field(default_factory=dict)
     retries: int = 0
     metadata: dict = field(default_factory=dict)
