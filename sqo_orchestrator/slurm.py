@@ -63,7 +63,7 @@ class SlurmClient:
     @staticmethod
     def _parse_submit_id(output: str) -> str:
         value = output.strip()
-        match = re.search(r"([0-9]+(?:_[0-9]+)?)$", value)
+        match = re.match(r"^([0-9]+(?:_[0-9]+)?)(?:;.*)?$", value)
         if not match:
             raise SlurmError(f"unable to parse Slurm job id from: {value!r}")
         return match.group(1)
@@ -113,30 +113,35 @@ class SlurmClient:
         name, comment = self._identity(job)
         try:
             output = subprocess.check_output(
-                ["squeue", "-h", "--name", name, "-o", "%i|%k"],
+                ["squeue", "-h", "--name", name, "-O", "JobID,Comment"],
                 text=True,
                 stderr=subprocess.STDOUT,
             )
         except subprocess.CalledProcessError:
             output = ""
         for line in output.splitlines():
-            parts = line.strip().split("|", 1)
+            parts = line.strip().split(None, 1)
             if len(parts) == 2 and parts[1].strip() == comment:
                 return parts[0].strip()
         try:
             output = subprocess.check_output(
                 ["sacct", "-X", "-n", "-P", "--name", name,
-                 "--starttime", "now-1day",
+                 "--starttime", "now-7days",
                  "--format=JobIDRaw,State,Comment"],
                 text=True,
                 stderr=subprocess.STDOUT,
             )
         except subprocess.CalledProcessError:
             return None
+        rows = []
         for line in output.splitlines():
             parts = line.strip().split("|", 2)
-            if len(parts) == 3 and parts[0].strip() and parts[2].strip() == comment:
-                return parts[0].strip()
+            if len(parts) == 3 and parts[0].strip():
+                rows.append(parts)
+                if parts[2].strip() == comment:
+                    return parts[0].strip()
+        if len(rows) == 1:
+            return rows[0][0].strip()
         return None
 
     def submit(self, job: JobSpec) -> str:
