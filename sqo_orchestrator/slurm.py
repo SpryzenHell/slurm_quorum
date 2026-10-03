@@ -108,7 +108,23 @@ class SlurmClient:
         except subprocess.CalledProcessError:
             output = ""
         ids = [line.strip() for line in output.splitlines() if line.strip()]
-        return ids[0] if ids else None
+        if ids:
+            return ids[0]
+        try:
+            output = subprocess.check_output(
+                ["sacct", "-X", "-n", "-P", "--name", name,
+                 "--starttime", "now-1day",
+                 "--format=JobIDRaw,State"],
+                text=True,
+                stderr=subprocess.STDOUT,
+            )
+        except subprocess.CalledProcessError:
+            return None
+        for line in output.splitlines():
+            parts = line.strip().split("|", 1)
+            if len(parts) == 2 and parts[0].strip():
+                return parts[0].strip()
+        return None
 
     def submit(self, job: JobSpec) -> str:
         if self.dry_run:
@@ -138,6 +154,21 @@ class SlurmClient:
         finally:
             if script_path is not None:
                 script_path.unlink(missing_ok=True)
+
+    def cancel(self, scheduler_id: str):
+        if self.dry_run or scheduler_id.startswith("DRY-"):
+            return True
+        try:
+            subprocess.check_output(
+                ["scancel", scheduler_id],
+                text=True,
+                stderr=subprocess.STDOUT,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise SlurmError(
+                exc.output.strip() or f"scancel failed for {scheduler_id}"
+            ) from exc
+        return True
 
     def live_status(self, scheduler_id: str) -> SlurmStatus | None:
         if self.dry_run or scheduler_id.startswith("DRY-"):
