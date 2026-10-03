@@ -390,8 +390,29 @@ class TelemetryReplicator:
 class SlurmBackend:
     def __init__(self,partition='gpu',dry_run=False):self.partition=partition;self.dry_run=dry_run
     def script(self,job):
-        env='\n'.join(f'export {k}={json.dumps(v)}' for k,v in sorted(job.env.items())); cmd=' '.join(subprocess.list2cmdline([x]) for x in job.command)
-        lines=['#!/usr/bin/env bash','set -euo pipefail',f'#SBATCH --job-name=sqo-{job.job_id[:12]}',f'#SBATCH --partition={self.partition}',f'#SBATCH --cpus-per-task={job.cpus}',f'#SBATCH --mem={job.memory_mb}M',f'#SBATCH --time={job.time_limit_s//60:02d}:{job.time_limit_s%60:02d}',*( [f'#SBATCH --gres=gpu:{job.gpus}'] if job.gpus else [] ),env,cmd]
+        env='\n'.join(f'export {k}={json.dumps(v)}' for k,v in sorted(job.env.items()))
+        cmd=' '.join(subprocess.list2cmdline([x]) for x in job.command)
+        partition=job.partition or self.partition
+        wall_minutes, wall_seconds = divmod(job.time_limit_s, 60)
+        lines=[
+            '#!/usr/bin/env bash',
+            'set -euo pipefail',
+            f'#SBATCH --job-name=sqo-{job.job_id[:12]}',
+            f'#SBATCH --partition={partition}',
+            f'#SBATCH --cpus-per-task={job.cpus}',
+            f'#SBATCH --mem={job.memory_mb}M',
+            f'#SBATCH --time={wall_minutes:02d}:{wall_seconds:02d}',
+        ]
+        if job.gpus:
+            gres=f"gpu:{job.gpu_type}:{job.gpus}" if job.gpu_type else f"gpu:{job.gpus}"
+            lines.append(f'#SBATCH --gres={gres}')
+        if job.qos:
+            lines.append(f'#SBATCH --qos={job.qos}')
+        if job.constraint:
+            lines.append(f'#SBATCH --constraint={job.constraint}')
+        if env:
+            lines.append(env)
+        lines.append(cmd)
         return '\n'.join(x for x in lines if x)+'\n'
     def submit(self,job):
         if self.dry_run or shutil.which('sbatch') is None:return {'job_id':job.job_id,'scheduler_id':f'DRY-{job.job_id}'}
@@ -468,7 +489,7 @@ class Orchestrator:
                 force_path_style=s3_force_path_style,
             )
             self.rep=TelemetryReplicator(self.db,sink)
-            self.lease=S3Lease(s3_bucket,s3_prefix,endpoint_url=s3_endpoint_url,region_name=s3_region)
+            self.lease=S3Lease(s3_bucket,s3_prefix,endpoint_url=s3_endpoint_url,region_name=s3_region,force_path_style=s3_force_path_style)
         else:
             self.rep=TelemetryReplicator(self.db,self.telemetry)
             self.lease=FileLease(root/'leases')
