@@ -452,7 +452,7 @@ class SlurmController:
         return finished
 
 class Orchestrator:
-    def __init__(self,root,node_id='node-1',nodes=None,lease_ttl_s=8,s3_bucket=None,s3_prefix='slurm-quorum',s3_telemetry_prefix=None,s3_endpoint_url=None,s3_region=None):
+    def __init__(self,root,node_id='node-1',nodes=None,lease_ttl_s=8,s3_bucket=None,s3_prefix='slurm-quorum',s3_telemetry_prefix=None,s3_endpoint_url=None,s3_region=None,s3_force_path_style=False):
         root=Path(root)
         self.node_id=node_id
         self.nodes=list(nodes or ('node-1','node-2','node-3'))
@@ -460,7 +460,13 @@ class Orchestrator:
         self.telemetry=Telemetry(root/'telemetry')
         if s3_bucket:
             from .telemetry import S3TelemetrySink
-            sink=S3TelemetrySink(s3_bucket,s3_telemetry_prefix or f'{s3_prefix}/telemetry')
+            sink=S3TelemetrySink(
+                s3_bucket,
+                s3_telemetry_prefix or f'{s3_prefix}/telemetry',
+                endpoint_url=s3_endpoint_url,
+                region_name=s3_region,
+                force_path_style=s3_force_path_style,
+            )
             self.rep=TelemetryReplicator(self.db,sink)
             self.lease=S3Lease(s3_bucket,s3_prefix,endpoint_url=s3_endpoint_url,region_name=s3_region)
         else:
