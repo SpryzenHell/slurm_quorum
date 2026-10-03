@@ -68,7 +68,13 @@ class SlurmClient:
             raise SlurmError(f"unable to parse Slurm job id from: {value!r}")
         return match.group(1)
 
+    @staticmethod
+    def _identity(job: JobSpec) -> tuple[str, str]:
+        attempt = int(job.metadata.get("sqo_attempt", 1))
+        return f"sqo-{job.job_id[:24]}", f"sqo:{job.job_id}:attempt:{attempt}"
+
     def script(self, job: JobSpec) -> str:
+        job_name, comment = self._identity(job)
         env = "\n".join(
             f"export {key}={json.dumps(value)}" for key, value in sorted(job.env.items())
         )
@@ -79,12 +85,12 @@ class SlurmClient:
         lines = [
             "#!/usr/bin/env bash",
             "set -euo pipefail",
-            f"#SBATCH --job-name=sqo-{job.job_id[:24]}",
+            f"#SBATCH --job-name={job_name}",
             f"#SBATCH --partition={self.partition}",
             f"#SBATCH --cpus-per-task={job.cpus}",
             f"#SBATCH --mem={job.memory_mb}M",
             f"#SBATCH --time={wall_minutes}",
-            f"#SBATCH --comment=sqo:{job.job_id}",
+            f"#SBATCH --comment={comment}",
             f"#SBATCH --output={self.work_dir / (job.job_id + '.out')}",
             f"#SBATCH --error={self.work_dir / (job.job_id + '.err')}",
         ]
@@ -98,31 +104,32 @@ class SlurmClient:
     def find_existing(self, job: JobSpec) -> str | None:
         if self.dry_run or not self.available():
             return None
-        name = f"sqo-{job.job_id[:24]}"
+        name, comment = self._identity(job)
         try:
             output = subprocess.check_output(
-                ["squeue", "-h", "--name", name, "-o", "%i"],
+                ["squeue", "-h", "--name", name, "-o", "%i|%k"],
                 text=True,
                 stderr=subprocess.STDOUT,
             )
         except subprocess.CalledProcessError:
             output = ""
-        ids = [line.strip() for line in output.splitlines() if line.strip()]
-        if ids:
-            return ids[0]
+        for line in output.splitlines():
+            parts = line.strip().split("|", 1)
+            if len(parts) == 2 and parts[1].strip() == comment:
+                return parts[0].strip()
         try:
             output = subprocess.check_output(
                 ["sacct", "-X", "-n", "-P", "--name", name,
                  "--starttime", "now-1day",
-                 "--format=JobIDRaw,State"],
+                 "--format=JobIDRaw,State,Comment"],
                 text=True,
                 stderr=subprocess.STDOUT,
             )
         except subprocess.CalledProcessError:
             return None
         for line in output.splitlines():
-            parts = line.strip().split("|", 1)
-            if len(parts) == 2 and parts[0].strip():
+            parts = line.strip().split("|", 2)
+            if len(parts) == 3 and parts[0].strip() and parts[2].strip() == comment:
                 return parts[0].strip()
         return None
 
