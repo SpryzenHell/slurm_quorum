@@ -4,6 +4,7 @@ import gzip
 import io
 import json
 import time
+import uuid
 from pathlib import Path
 
 
@@ -40,7 +41,7 @@ class S3TelemetrySink:
         )
         compressed = gzip.compress(payload, mtime=0)
         stamp = int(time.time() * 1_000_000)
-        key = f"{self.prefix}/segment-{stamp}-{len(self.buffer)}.jsonl.gz"
+        key = f"{self.prefix}/segment-{stamp}-{uuid.uuid4().hex[:12]}-{len(self.buffer)}.jsonl.gz"
         self.client.put_object(
             Bucket=self.bucket,
             Key=key,
