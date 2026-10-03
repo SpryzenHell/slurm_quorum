@@ -11,10 +11,13 @@ def heartbeat(db: NodeDB, job_id: str, worker_id: str) -> bool:
 def requeue_stale(db: NodeDB, timeout_s: float) -> int:
     cutoff = time.time() - timeout_s
     with db.connect() as c:
-        rows = c.execute("SELECT job_id FROM jobs WHERE state=? AND heartbeat_at < ?", (JobState.RUNNING, cutoff)).fetchall()
+        rows = c.execute(
+            "SELECT job_id FROM jobs WHERE state=? AND heartbeat_at < ? AND scheduler_id IS NULL",
+            (JobState.RUNNING, cutoff),
+        ).fetchall()
         if rows:
             c.executemany("UPDATE jobs SET state=?, owner=NULL, heartbeat_at=NULL WHERE job_id=? AND state=?", [(JobState.RETRY, r["job_id"], JobState.RUNNING) for r in rows])
             for r in rows:
-                db._event(c, "job.requeued_after_stale_worker", r["job_id"], {"timeout_s": timeout_s})
+                db._event(c, "job.requeued_after_stale_worker", r["job_id"], {"timeout_s": timeout_s, "reason": "no_scheduler_allocation"})
             c.commit()
     return len(rows)
