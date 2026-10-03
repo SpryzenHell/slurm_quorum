@@ -20,8 +20,10 @@ _CLAIM_LUA = r"""
 local item = redis.call('ZPOPMAX', KEYS[1], 1)
 if #item == 0 then return nil end
 local job_id = item[1]
-local expiry = tonumber(ARGV[1]) + tonumber(ARGV[2])
-redis.call('HSET', KEYS[2], job_id, ARGV[3])
+local now = redis.call('TIME')
+local now_s = tonumber(now[1]) + (tonumber(now[2]) / 1000000)
+local expiry = now_s + tonumber(ARGV[1])
+redis.call('HSET', KEYS[2], job_id, ARGV[2])
 redis.call('ZADD', KEYS[3], expiry, job_id)
 return job_id
 """
@@ -35,16 +37,29 @@ redis.call('ZADD', KEYS[2], tonumber(ARGV[3]), ARGV[1])
 return 1
 """
 
+_ACK_LUA = r"""
+local owner = redis.call('HGET', KEYS[1], ARGV[1])
+if not owner then
+  return 0
+end
+if ARGV[2] ~= '' and owner ~= ARGV[2] then
+  return 0
+end
+redis.call('HDEL', KEYS[1], ARGV[1])
+redis.call('ZREM', KEYS[2], ARGV[1])
+return 1
+"""
+
 _REQUEUE_LUA = r"""
-local ids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[2])
+local now = redis.call('TIME')
+local now_s = tonumber(now[1]) + (tonumber(now[2]) / 1000000)
+local ids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', now_s, 'LIMIT', 0, ARGV[1])
 for _, job_id in ipairs(ids) do
   local meta = redis.call('HGET', KEYS[3], job_id)
   if meta then
     local score = redis.call('HGET', KEYS[4], job_id)
     redis.call('ZREM', KEYS[1], job_id)
     redis.call('ZREM', KEYS[2], job_id)
-    redis.call('HDEL', KEYS[3], job_id)
-    redis.call('HDEL', KEYS[4], job_id)
     if score then redis.call('ZADD', KEYS[5], tonumber(score), job_id) end
   end
 end
@@ -70,6 +85,7 @@ class RedisJobQueue:
         self.meta_key = f"{namespace}:meta:{queue_name}"
         self.claim_script = self.redis.register_script(_CLAIM_LUA)
         self.renew_script = self.redis.register_script(_RENEW_LUA)
+        self.ack_script = self.redis.register_script(_ACK_LUA)
         self.requeue_script = self.redis.register_script(_REQUEUE_LUA)
 
     @staticmethod
@@ -106,10 +122,9 @@ class RedisJobQueue:
         return len(jobs)
 
     def claim(self, worker_id: str, lease_s: float = 30.0) -> RedisClaim | None:
-        now = time.time()
         job_id = self.claim_script(
             keys=[self.ready_key, self.inflight_key, self.lease_key],
-            args=[now, lease_s, worker_id],
+            args=[lease_s, worker_id],
         )
         if not job_id:
             return None
@@ -124,7 +139,7 @@ class RedisJobQueue:
         return RedisClaim(
             job=JobSpec.from_json(payload),
             worker_id=worker_id,
-            lease_until=now + lease_s,
+            lease_until=time.time() + lease_s,
         )
 
     def renew(self, job_id: str, worker_id: str, lease_s: float = 30.0) -> bool:
@@ -135,24 +150,17 @@ class RedisJobQueue:
         return int(result or 0) == 1
 
     def ack(self, job_id: str, worker_id: str | None = None) -> bool:
-        current = self.redis.hget(self.inflight_key, job_id)
-        if current is None:
-            return False
-        if worker_id is not None:
-            if isinstance(current, bytes):
-                current = current.decode()
-            if current != worker_id:
-                return False
-        pipe = self.redis.pipeline(transaction=True)
-        pipe.hdel(self.inflight_key, job_id)
-        pipe.zrem(self.lease_key, job_id)
-        pipe.execute()
-        return True
+        owner = worker_id or ""
+        result = self.ack_script(
+            keys=[self.inflight_key, self.lease_key],
+            args=[job_id, owner],
+        )
+        return int(result or 0) == 1
 
     def requeue_expired(self, limit: int = 100) -> list[str]:
         ids = self.requeue_script(
             keys=[self.lease_key, self.inflight_key, self.meta_key, f"{self.namespace}:scores", self.ready_key],
-            args=[time.time(), limit],
+            args=[limit],
         )
         return [
             item.decode() if isinstance(item, bytes) else item
