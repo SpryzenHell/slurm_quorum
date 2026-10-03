@@ -66,4 +66,4 @@ def test_slurm_time_is_rounded_up():
     client = SlurmClient(partition="dgx", dry_run=True)
     script = client.script(JobSpec(job_id="j1", command=["echo", "ok"], time_limit_s=61))
     assert "#SBATCH --time=2" in script
-    assert "#SBATCH --comment=sqo:j1" in script
+    assert "#SBATCH --comment=sqo:j1:attempt:1" in script
