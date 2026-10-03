@@ -46,23 +46,18 @@ elif a.cmd == "failover":
     ))
 
 else:
-    from types import SimpleNamespace
     peers = json.loads(a.peers)
     node_id = os.environ.get("SQO_NODE_ID", a.bind.rsplit(":", 1)[-1])
     root = a.root
     state_dir = a.state_dir or (root / "state")
     lease_dir = a.lease_dir or (root / "leases")
-    settings = SimpleNamespace(
+    NodeRuntime(
         node_id=node_id,
-        cluster_nodes=[node_id] + list(peers.keys()),
+        bind=a.bind,
+        peers=peers,
         state_dir=state_dir,
         lease_dir=lease_dir,
-        s3_bucket=a.s3_bucket,
-        s3_prefix=a.s3_prefix,
-        lease_ttl_s=float(os.environ.get("SQO_LEASE_TTL_S", "8")),
-        heartbeat_interval_s=float(os.environ.get("SQO_HEARTBEAT_S", "1")),
-        election_min_s=float(os.environ.get("SQO_ELECTION_MIN_S", "2")),
-        election_max_s=float(os.environ.get("SQO_ELECTION_MAX_S", "4")),
-        majority=(len(peers) + 1) // 2 + 1,
-    )
-    NodeRuntime(settings, a.bind, peers).serve_forever()
+        lease_ttl=float(os.environ.get("SQO_LEASE_TTL_S", "8")),
+        election=(float(os.environ.get("SQO_ELECTION_MIN_S", "2")),
+                  float(os.environ.get("SQO_ELECTION_MAX_S", "4"))),
+    ).serve()
