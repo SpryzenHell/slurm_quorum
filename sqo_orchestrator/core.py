@@ -101,18 +101,19 @@ class NodeDB:
                      worker_id, job.submitted_at, now, now),
                 )
                 self._event(c, "job.started", job.job_id, {"worker": worker_id, "attempt": 1, "source": "redis"})
-            elif row["state"] == JobState.RUNNING and row["scheduler_id"]:
-                c.execute("ROLLBACK")
-                return row
+            elif row["state"] == JobState.RUNNING:
+                c.execute("UPDATE jobs SET owner=?,heartbeat_at=? WHERE job_id=?", (worker_id, now, job.job_id))
+                row = c.execute("SELECT * FROM jobs WHERE job_id=?", (job.job_id,)).fetchone()
             else:
+                next_attempt = int(row["attempts"]) + 1
                 c.execute(
-                    "UPDATE jobs SET payload=?,state=?,priority=?,attempts=attempts+1,owner=?,started_at=?,heartbeat_at=?,finished_at=NULL,error=NULL,scheduler_id=NULL "
+                    "UPDATE jobs SET payload=?,state=?,priority=?,attempts=?,owner=?,started_at=?,heartbeat_at=?,finished_at=NULL,error=NULL,scheduler_id=NULL "
                     "WHERE job_id=?",
-                    (job.to_json(), JobState.RUNNING, job.priority, worker_id, now, now, job.job_id),
+                    (job.to_json(), JobState.RUNNING, job.priority, next_attempt, worker_id, now, now, job.job_id),
                 )
                 self._event(
                     c, "job.started", job.job_id,
-                    {"worker": worker_id, "attempt": int(row["attempts"]) + 1, "source": "redis"},
+                    {"worker": worker_id, "attempt": next_attempt, "source": "redis"},
                 )
             c.execute("COMMIT")
             return self.get_job(job.job_id)
