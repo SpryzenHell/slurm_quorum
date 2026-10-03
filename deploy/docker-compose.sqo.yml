@@ -1,0 +1,149 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: sqo-minio
+      MINIO_ROOT_PASSWORD: sqo-minio-password
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio-data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: ['/bin/sh', '-c']
+    command: >-
+      'until mc alias set local http://minio:9000 sqo-minio sqo-minio-password; do sleep 2; done;
+       mc mb --ignore-existing local/sqo; exit 0'
+
+  sqo-node-1:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.sqo
+    restart: unless-stopped
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      SQO_NODE_ID: node-1
+      AWS_ACCESS_KEY_ID: sqo-minio
+      AWS_SECRET_ACCESS_KEY: sqo-minio-password
+    command:
+      - python
+      - -m
+      - sqo_orchestrator
+      - serve
+      - --root
+      - /data
+      - --bind
+      - 0.0.0.0:8101
+      - --peers
+      - '{"node-2":"http://sqo-node-2:8102","node-3":"http://sqo-node-3:8103"}'
+      - --s3-bucket
+      - sqo
+      - --s3-prefix
+      - slurm-quorum
+      - --s3-endpoint-url
+      - http://minio:9000
+      - --s3-region
+      - us-east-1
+      - --s3-force-path-style
+    ports:
+      - '8101:8101'
+    volumes:
+      - sqo-node-1:/data
+
+  sqo-node-2:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.sqo
+    restart: unless-stopped
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      SQO_NODE_ID: node-2
+      AWS_ACCESS_KEY_ID: sqo-minio
+      AWS_SECRET_ACCESS_KEY: sqo-minio-password
+    command:
+      - python
+      - -m
+      - sqo_orchestrator
+      - serve
+      - --root
+      - /data
+      - --bind
+      - 0.0.0.0:8102
+      - --peers
+      - '{"node-1":"http://sqo-node-1:8101","node-3":"http://sqo-node-3:8103"}'
+      - --s3-bucket
+      - sqo
+      - --s3-prefix
+      - slurm-quorum
+      - --s3-endpoint-url
+      - http://minio:9000
+      - --s3-region
+      - us-east-1
+      - --s3-force-path-style
+    ports:
+      - '8102:8102'
+    volumes:
+      - sqo-node-2:/data
+
+  sqo-node-3:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.sqo
+    restart: unless-stopped
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      SQO_NODE_ID: node-3
+      AWS_ACCESS_KEY_ID: sqo-minio
+      AWS_SECRET_ACCESS_KEY: sqo-minio-password
+    command:
+      - python
+      - -m
+      - sqo_orchestrator
+      - serve
+      - --root
+      - /data
+      - --bind
+      - 0.0.0.0:8103
+      - --peers
+      - '{"node-1":"http://sqo-node-1:8101","node-2":"http://sqo-node-2:8102"}'
+      - --s3-bucket
+      - sqo
+      - --s3-prefix
+      - slurm-quorum
+      - --s3-endpoint-url
+      - http://minio:9000
+      - --s3-region
+      - us-east-1
+      - --s3-force-path-style
+    ports:
+      - '8103:8103'
+    volumes:
+      - sqo-node-3:/data
+
+volumes:
+  redis-data:
+  minio-data:
+  sqo-node-1:
+  sqo-node-2:
+  sqo-node-3:
