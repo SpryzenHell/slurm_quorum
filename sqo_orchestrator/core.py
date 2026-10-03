@@ -124,6 +124,39 @@ class NodeDB:
                 (JobState.RUNNING,),
             ).fetchall()
 
+    def finalize_slurm(self, job_id, scheduler_id, success, exit_code=None, error=None, requeue=False):
+        state = JobState.SUCCEEDED if success else (JobState.RETRY if requeue else JobState.FAILED)
+        with self.connect() as c:
+            c.execute("BEGIN IMMEDIATE")
+            cur = c.execute(
+                "UPDATE jobs SET state=?,scheduler_id=?,slurm_state=?,slurm_exit_code=?,finished_at=?,owner=NULL,heartbeat_at=NULL,error=? "
+                "WHERE job_id=? AND scheduler_id=? AND state=?",
+                (
+                    state,
+                    scheduler_id,
+                    "COMPLETED" if success else "FAILED",
+                    exit_code,
+                    time.time(),
+                    error[:4000] if error else None,
+                    job_id,
+                    scheduler_id,
+                    JobState.RUNNING,
+                ),
+            )
+            if cur.rowcount:
+                self._event(
+                    c,
+                    "job.succeeded" if success else ("job.retry" if requeue else "job.failed"),
+                    job_id,
+                    {"scheduler_id": scheduler_id, "exit_code": exit_code, "error": error},
+                )
+            c.execute("COMMIT")
+            return cur.rowcount == 1
+
+    def get_job(self, job_id):
+        with self.connect() as c:
+            return c.execute("SELECT * FROM jobs WHERE job_id=?", (job_id,)).fetchone()
+
     def counts(self):
         with self.connect() as c:return {r['state']:int(r['n']) for r in c.execute('SELECT state,COUNT(*) n FROM jobs GROUP BY state')}
     def pending(self):
@@ -315,9 +348,22 @@ class SlurmController:
                 row["job_id"], row["scheduler_id"], status.state, status.exit_code
             )
             if status.state in TERMINAL_SUCCESS:
-                finished.append((row["job_id"], True))
+                self.db.finalize_slurm(
+                    row["job_id"], row["scheduler_id"], True, status.exit_code
+                )
+                finished.append((row["job_id"], True, status.state))
             elif status.state in TERMINAL_FAILURE:
-                finished.append((row["job_id"], False))
+                job = JobSpec.from_json(row["payload"])
+                should_retry = row["attempts"] <= job.retries
+                self.db.finalize_slurm(
+                    row["job_id"],
+                    row["scheduler_id"],
+                    False,
+                    status.exit_code,
+                    error=status.state,
+                    requeue=should_retry,
+                )
+                finished.append((row["job_id"], False, status.state, should_retry))
         return finished
 
 class Orchestrator:
