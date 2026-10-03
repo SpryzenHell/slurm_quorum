@@ -305,10 +305,22 @@ class TelemetryReplicator:
         total=0
         while True:
             rows=self.db.events_since(self.cursor)
-            if not rows:break
-            for r in rows:self.sink.append({'seq':r['seq'],'event_id':r['event_id'],'ts':r['ts'],'node_id':r['node_id'],'kind':r['kind'],'job_id':r['job_id'],'payload':json.loads(r['payload'])})
-            self.cursor=rows[-1]['seq'];self.db.set_meta('telemetry.cursor',str(self.cursor));total+=len(rows)
-            if len(rows)<1000:break
+            if not rows:
+                break
+            for r in rows:
+                self.sink.append({
+                    'seq':r['seq'],'event_id':r['event_id'],'ts':r['ts'],
+                    'node_id':r['node_id'],'kind':r['kind'],'job_id':r['job_id'],
+                    'payload':json.loads(r['payload']),
+                })
+            self.cursor=rows[-1]['seq']
+            self.db.set_meta('telemetry.cursor',str(self.cursor))
+            total+=len(rows)
+            if len(rows)<1000:
+                break
+        flush_sink=getattr(self.sink,'flush',None)
+        if flush_sink is not None:
+            flush_sink()
         return total
 
 class SlurmBackend:
@@ -368,8 +380,22 @@ class SlurmController:
         return finished
 
 class Orchestrator:
-    def __init__(self,root,node_id='node-1',nodes=None,lease_ttl_s=8):
-        root=Path(root); self.node_id=node_id; self.nodes=list(nodes or ('node-1','node-2','node-3')); self.db=NodeDB(root/f'state/{node_id}.db',node_id); self.telemetry=Telemetry(root/'telemetry'); self.rep=TelemetryReplicator(self.db,self.telemetry); self.lease=FileLease(root/'leases'); self.term=0; self.lease_ttl=lease_ttl_s
+    def __init__(self,root,node_id='node-1',nodes=None,lease_ttl_s=8,s3_bucket=None,s3_prefix='slurm-quorum',s3_telemetry_prefix=None):
+        root=Path(root)
+        self.node_id=node_id
+        self.nodes=list(nodes or ('node-1','node-2','node-3'))
+        self.db=NodeDB(root/f'state/{node_id}.db',node_id)
+        self.telemetry=Telemetry(root/'telemetry')
+        if s3_bucket:
+            from .telemetry import S3TelemetrySink
+            sink=S3TelemetrySink(s3_bucket,s3_telemetry_prefix or f'{s3_prefix}/telemetry')
+            self.rep=TelemetryReplicator(self.db,sink)
+            self.lease=S3Lease(s3_bucket,s3_prefix)
+        else:
+            self.rep=TelemetryReplicator(self.db,self.telemetry)
+            self.lease=FileLease(root/'leases')
+        self.term=0
+        self.lease_ttl=lease_ttl_s
     def acquire_master(self):
         self.term+=1; r=self.lease.acquire('cluster-master',self.node_id,self.term,self.lease_ttl); self.master=bool(r); return self.master
     def renew_master(self):
@@ -391,5 +417,6 @@ class Orchestrator:
             return n
         t=time.perf_counter()
         with ThreadPoolExecutor(max_workers=workers) as pool: [f.result() for f in [pool.submit(worker,i) for i in range(workers)]]
-        elapsed=time.perf_counter()-t; self.rep.flush()
-        return {'jobs_submitted':jobs,'workers':workers,'elapsed_s':elapsed,'jobs_per_second':jobs/elapsed,'state_counts':self.db.counts(),'telemetry_events_replicated':self.telemetry.count(),'sqlite_wal':True}
+        elapsed=time.perf_counter()-t
+        replicated=self.rep.flush()
+        return {'jobs_submitted':jobs,'workers':workers,'elapsed_s':elapsed,'jobs_per_second':jobs/elapsed,'state_counts':self.db.counts(),'telemetry_events_replicated':replicated,'sqlite_wal':True}
