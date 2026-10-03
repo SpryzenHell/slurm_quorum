@@ -65,3 +65,29 @@ def test_retryable_slurm_failure_returns_to_redis(tmp_path):
     assert result[0][3] is True
     assert queue.depth() == 1
     assert db.get_job("retry-1")["state"] == "retry"
+
+
+def test_retryable_submit_failure_returns_job_to_redis(tmp_path):
+    redis = fakeredis.FakeRedis()
+    queue = RedisJobQueue(redis, queue_name="gpu")
+    db = NodeDB(tmp_path / "db.sqlite", "node-1")
+
+    class BrokenSlurm:
+        def submit(self, job):
+            raise RuntimeError("controller unavailable")
+
+    job = JobSpec(job_id="submit-retry", command=["true"], queue="gpu", retries=1)
+    queue.enqueue(job)
+    controller = SlurmController(db, BrokenSlurm(), "worker-1")
+    agent = RedisSlurmAgent(queue, db, controller)
+
+    try:
+        agent.dispatch_once()
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected submission failure")
+
+    assert queue.depth() == 1
+    assert queue.inflight() == 0
+    assert db.get_job("submit-retry")["state"] == "retry"
