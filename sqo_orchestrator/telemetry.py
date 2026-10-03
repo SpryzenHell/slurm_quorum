@@ -33,11 +33,16 @@ class S3TelemetrySink:
         self.client = client
         self.bucket = bucket
         self.prefix = prefix.rstrip("/")
+        if batch_size < 1:
+            raise ValueError("batch_size must be positive")
         self.batch_size = batch_size
         self.buffer: list[dict] = []
 
     def append(self, event: dict):
         self.buffer.append(event)
+        if len(self.buffer) >= self.batch_size:
+            return self.flush()
+        return None
 
     def flush(self):
         if not self.buffer:
@@ -65,7 +70,6 @@ class S3TelemetrySink:
         except Exception as exc:
             code = getattr(getattr(exc, "response", {}), "get", lambda *_: None)("Error", {}).get("Code") if hasattr(exc, "response") else None
             if code not in {"PreconditionFailed", "412"}:
-                self.buffer.clear()
                 raise
         count = len(self.buffer)
         self.buffer.clear()
