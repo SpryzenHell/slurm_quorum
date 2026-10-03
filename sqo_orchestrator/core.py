@@ -243,9 +243,13 @@ class FileLease:
         except FileNotFoundError:return False
 
 class S3Lease:
-    def __init__(self,bucket,prefix='slurm-quorum',client=None):
+    def __init__(self,bucket,prefix='slurm-quorum',client=None,endpoint_url=None,region_name=None):
         if client is None:
-            import boto3; client=boto3.client('s3')
+            import boto3
+            kwargs={}
+            if endpoint_url: kwargs["endpoint_url"]=endpoint_url
+            if region_name: kwargs["region_name"]=region_name
+            client=boto3.client('s3',**kwargs)
         self.client=client; self.bucket=bucket; self.prefix=prefix.rstrip('/')
     def _key(self,r):return f'{self.prefix}/locks/{r.replace("/","_")}.json'
     def _read(self,k):
@@ -435,7 +439,7 @@ class SlurmController:
         return finished
 
 class Orchestrator:
-    def __init__(self,root,node_id='node-1',nodes=None,lease_ttl_s=8,s3_bucket=None,s3_prefix='slurm-quorum',s3_telemetry_prefix=None):
+    def __init__(self,root,node_id='node-1',nodes=None,lease_ttl_s=8,s3_bucket=None,s3_prefix='slurm-quorum',s3_telemetry_prefix=None,s3_endpoint_url=None,s3_region=None):
         root=Path(root)
         self.node_id=node_id
         self.nodes=list(nodes or ('node-1','node-2','node-3'))
@@ -445,7 +449,7 @@ class Orchestrator:
             from .telemetry import S3TelemetrySink
             sink=S3TelemetrySink(s3_bucket,s3_telemetry_prefix or f'{s3_prefix}/telemetry')
             self.rep=TelemetryReplicator(self.db,sink)
-            self.lease=S3Lease(s3_bucket,s3_prefix)
+            self.lease=S3Lease(s3_bucket,s3_prefix,endpoint_url=s3_endpoint_url,region_name=s3_region)
         else:
             self.rep=TelemetryReplicator(self.db,self.telemetry)
             self.lease=FileLease(root/'leases')
