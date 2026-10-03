@@ -50,11 +50,16 @@ class SlurmAgent:
 class RedisSlurmAgent:
     """Cross-node dispatcher: Redis claim -> local WAL record -> Slurm -> Redis ack."""
 
-    def __init__(self, queue, db: NodeDB, controller: SlurmController, lease_s: float = 30.0):
+    def __init__(self, queue, db: NodeDB, controller: SlurmController, lease_s: float = 30.0, telemetry_sink=None):
         self.queue = queue
         self.db = db
         self.controller = controller
         self.lease_s = lease_s
+        if telemetry_sink is not None:
+            from .core import TelemetryReplicator
+            self.telemetry = TelemetryReplicator(db, telemetry_sink)
+        else:
+            self.telemetry = None
 
     def dispatch_once(self):
         claim = self.queue.claim(self.controller.worker_id, lease_s=self.lease_s)
@@ -86,3 +91,16 @@ class RedisSlurmAgent:
 
     def reap_expired_claims(self):
         return self.queue.requeue_expired()
+
+
+    def tick(self):
+        dispatched = self.dispatch_once()
+        reconciled = self.reconcile_once()
+        requeued = self.reap_expired_claims()
+        replicated = self.telemetry.flush() if self.telemetry is not None else 0
+        return {
+            "dispatched": dispatched,
+            "reconciled": reconciled,
+            "requeued_claims": requeued,
+            "telemetry_events_replicated": replicated,
+        }
