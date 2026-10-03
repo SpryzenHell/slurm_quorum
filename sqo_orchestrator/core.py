@@ -167,12 +167,13 @@ class S3Lease:
         except botocore.exceptions.ClientError:return None
         return LeaseRecord(**data)
     def release(self,resource,owner,term):
+        import botocore.exceptions
         cur=self._read(self._key(resource))
         if not cur or cur[0].get('owner')!=owner or int(cur[0].get('term',-1))!=term:return False
         _, etag = cur
         try:
             self.client.delete_object(Bucket=self.bucket,Key=self._key(resource),IfMatch=etag)
-        except Exception:
+        except botocore.exceptions.ClientError:
             return False
         return True
 
