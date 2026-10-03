@@ -1,0 +1,32 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyUnconditionalLockWrites",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::YOUR_BUCKET/slurm-quorum/locks/*",
+      "Condition": {
+        "Null": {
+          "s3:if-none-match": "true"
+        },
+        "StringNotEqualsIgnoreCase": {
+          "s3:if-match": "*"
+        }
+      }
+    },
+    {
+      "Sid": "DenyUnconditionalLockDeletes",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": "s3:DeleteObject",
+      "Resource": "arn:aws:s3:::YOUR_BUCKET/slurm-quorum/locks/*",
+      "Condition": {
+        "Null": {
+          "s3:if-match": "true"
+        }
+      }
+    }
+  ]
+}
