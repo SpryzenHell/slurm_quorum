@@ -23,6 +23,8 @@ p.add_argument('--lease-s', type=float, default=30.0)
 p.add_argument('--s3-bucket', default=os.environ.get('SQO_S3_BUCKET'))
 p.add_argument('--s3-prefix', default=os.environ.get('SQO_S3_PREFIX', 'slurm-quorum'))
 p.add_argument('--s3-telemetry-prefix', default=os.environ.get('SQO_S3_TELEMETRY_PREFIX'))
+p.add_argument('--s3-endpoint-url', default=os.environ.get('SQO_S3_ENDPOINT_URL'))
+p.add_argument('--s3-region', default=os.environ.get('SQO_S3_REGION'))
 p.add_argument('--once', action='store_true')
 args = p.parse_args()
 
@@ -36,6 +38,8 @@ if args.s3_bucket:
     telemetry_sink = S3TelemetrySink(
         args.s3_bucket,
         args.s3_telemetry_prefix or f'{args.s3_prefix}/telemetry',
+        endpoint_url=args.s3_endpoint_url,
+        region_name=args.s3_region,
     )
 agent = RedisSlurmAgent(
     queue, db, controller, lease_s=args.lease_s, telemetry_sink=telemetry_sink,
