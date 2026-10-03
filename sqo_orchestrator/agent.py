@@ -21,12 +21,14 @@ class SlurmAgent:
         try:
             return self.controller.submit_claimed(job)
         except Exception as exc:
+            current = self.db.get_job(job.job_id)
+            should_retry = bool(current and int(current["attempts"]) <= job.retries)
             with self.db.connect() as c:
                 self.db.fail(
                     job.job_id,
                     self.controller.worker_id,
                     str(exc),
-                    requeue=job.retries >= 1,
+                    requeue=should_retry,
                     c=c,
                 )
             raise
