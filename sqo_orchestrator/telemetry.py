@@ -65,6 +65,7 @@ class S3TelemetrySink:
         except Exception as exc:
             code = getattr(getattr(exc, "response", {}), "get", lambda *_: None)("Error", {}).get("Code") if hasattr(exc, "response") else None
             if code not in {"PreconditionFailed", "412"}:
+                self.buffer.clear()
                 raise
         count = len(self.buffer)
         self.buffer.clear()
