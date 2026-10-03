@@ -1,4 +1,4 @@
-from __future__
+from __future__ import annotations
 
 import json, os, random, shutil, sqlite3, subprocess, tempfile, time, uuid
 from concurrent.futures import ThreadPoolExecutor
