@@ -1,0 +1,17 @@
+name: slurm-quorum-compose-integration
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: sqo-compose-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f deploy/docker-compose.sqo.yml config -q
+      - run: bash scripts/demo_compose.sh
