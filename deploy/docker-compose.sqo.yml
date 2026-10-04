@@ -150,7 +150,8 @@ services:
       dockerfile: deploy/Dockerfile.sqo
     restart: unless-stopped
     depends_on:
-      - s3-init
+      s3-init:
+        condition: service_completed_successfully
     environment:
       SQO_NODE_ID: node-2
       AWS_ACCESS_KEY_ID: test
@@ -187,7 +188,8 @@ services:
       dockerfile: deploy/Dockerfile.sqo
     restart: unless-stopped
     depends_on:
-      - s3-init
+      s3-init:
+        condition: service_completed_successfully
     environment:
       SQO_NODE_ID: node-3
       AWS_ACCESS_KEY_ID: test
