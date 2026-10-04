@@ -3,7 +3,7 @@
 The deployment files cover the three environments supported by the project:
 
 1. a single-machine local demonstration;
-2. a Docker Compose lab using Redis and MinIO with Slurm dry-run mode; and
+2. a Docker Compose lab using Redis and LocalStack S3 with Slurm dry-run mode; and
 3. a multi-machine deployment using shared Redis, three quorum nodes, S3 fencing/telemetry and one or more Slurm agents.
 
 The root README is the main user guide. This file focuses on deployment details.
@@ -28,7 +28,7 @@ Or run the smoke script:
 
     bash scripts/demo_compose.sh
 
-The lab contains one Redis instance, one MinIO object store, three quorum nodes, and one SQO agent. The agent uses Slurm dry-run mode; no Slurm controller is expected in the Docker network.
+The lab contains one Redis instance, one LocalStack S3 service, three quorum nodes, and one SQO agent. The agent uses Slurm dry-run mode; no Slurm controller is expected in the Docker network.
 
 To stop and remove the lab volumes:
 
