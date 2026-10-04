@@ -22,6 +22,7 @@ jobs:
       - run: PYTHONPATH=. python -m py_compile sqo_orchestrator/*.py scripts/*.py
       - run: for f in scripts/benchmark_60k.sh scripts/check_3node_local.sh scripts/demo_compose.sh scripts/demo_local.sh scripts/quickstart.sh scripts/run_failover_demo.sh scripts/start_3node_local.sh; do bash -n "$f"; done
       - run: docker compose -f deploy/docker-compose.sqo.yml config -q
+      - run: bash scripts/demo_compose.sh
       - run: PYTHONPATH=. python -m sqo_orchestrator failover --root .sqo/ci-failover
       - run: PYTHONPATH=. python -m sqo_orchestrator load --jobs 10000 --workers 4 --root .sqo/ci-load
       - run: bash scripts/check_3node_local.sh .sqo/ci-network
