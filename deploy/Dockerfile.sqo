@@ -4,7 +4,7 @@ WORKDIR /app
 COPY sqo_orchestrator /app/sqo_orchestrator
 COPY scripts /app/scripts
 
-RUN python -m pip install --no-cache-dir -e /app/sqo_orchestrator
+RUN python -m pip install --no-cache-dir -e '/app/sqo_orchestrator[aws]'
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
