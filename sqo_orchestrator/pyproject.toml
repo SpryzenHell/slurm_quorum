@@ -11,9 +11,12 @@ dependencies = [
   "redis>=5.0",
 ]
 
+[project.scripts]
+sqo = "sqo_orchestrator.__main__:main"
+
 [project.optional-dependencies]
 aws = ["boto3>=1.35"]
-test = ["pytest>=8", "fakeredis>=2.26"]
+test = ["pytest>=8", "fakeredis[lua]>=2.26"]
 
 [tool.setuptools]
 packages = ["sqo_orchestrator"]
