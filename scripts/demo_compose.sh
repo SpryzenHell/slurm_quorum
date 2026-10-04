@@ -27,6 +27,10 @@ else:
     raise SystemExit('quorum did not elect a leader')
 PY
 
+docker compose -f "$COMPOSE" run --rm sqo-agent python /app/scripts/check_s3_mutex.py \
+  --bucket sqo --prefix slurm-quorum --endpoint-url http://localstack:4566 \
+  --region us-east-1 --contenders 3 --force-path-style
+
 docker compose -f "$COMPOSE" run --rm sqo-agent python /app/scripts/enqueue_job.py \
   --redis-url redis://redis:6379/0 --queue gpu --namespace sqo \
   --job-id compose-smoke --gpus 1 --cpus 2 --memory-mb 2048 \
@@ -39,14 +43,14 @@ docker compose -f "$COMPOSE" exec -T redis redis-cli ZCARD sqo:inflight:gpu
 
 echo '== telemetry objects =='
 for _ in $(seq 1 20); do
-  if docker compose -f "$COMPOSE" run --rm --entrypoint /bin/sh minio-init -c \
-    'mc alias set local http://minio:9000 sqo-minio sqo-minio-password >/dev/null 2>&1 && mc ls --recursive local/sqo/slurm-quorum/telemetry 2>/dev/null | grep -q .'; then
+  if docker compose -f "$COMPOSE" run --rm sqo-agent python -c \
+    'import boto3; from botocore.config import Config; c=boto3.client("s3",endpoint_url="http://localstack:4566",region_name="us-east-1",config=Config(s3={"addressing_style":"path"})); r=c.list_objects_v2(Bucket="sqo",Prefix="slurm-quorum/telemetry"); raise SystemExit(0 if r.get("Contents") else 1)'; then
     break
   fi
   sleep 1
 done
 
-docker compose -f "$COMPOSE" run --rm --entrypoint /bin/sh minio-init -c \
-  'mc alias set local http://minio:9000 sqo-minio sqo-minio-password >/dev/null 2>&1 && mc ls --recursive local/sqo/slurm-quorum/telemetry'
+docker compose -f "$COMPOSE" run --rm sqo-agent python -c \
+  'import boto3; from botocore.config import Config; c=boto3.client("s3",endpoint_url="http://localstack:4566",region_name="us-east-1",config=Config(s3={"addressing_style":"path"})); print(c.list_objects_v2(Bucket="sqo",Prefix="slurm-quorum/telemetry").get("Contents", []))'
 
 echo 'compose SQO smoke complete'
