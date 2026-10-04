@@ -30,6 +30,20 @@ Redis is **not required** for the local failover, WAL, or throughput demonstrati
 
 For the distributed queue and Slurm path, also install Redis/Valkey. For the Docker lab, install Docker with the Compose plugin. For a real scheduler run, the machine running the agent must have `sbatch`, `squeue`, and `sacct` available.
 
+### Values to provide for a real deployment
+
+The repository is complete for local and container execution. A real cluster deployment still needs environment-specific values:
+
+| Value | Where it is used |
+| --- | --- |
+| Redis/Valkey address and credentials | Shared job admission |
+| Three node addresses and unique node IDs | Quorum service |
+| S3 bucket, region and AWS role/credentials | Master fencing and telemetry |
+| Slurm partition and site-specific QoS/constraints | Scheduler submission |
+| Persistent filesystem locations | SQLite WAL and service state |
+
+These values remain placeholders in `configs/` and `deploy/`. They are the only deployment inputs that cannot be inferred from source code.
+
 ### Option A — one command
 
 From the repository root:
@@ -456,7 +470,8 @@ Stop the existing local cluster processes or change the bind addresses in your o
 
 ## Verified repository evidence
 
-The following outputs are from GitHub Actions run 188 for the SQO test workflow:
+The repository's latest completed green control-plane run recorded the following observed results; newer workflow runs also exercise fresh package installation and the Docker Compose integration path:
+
 
 | Check | Result |
 | --- | --- |
