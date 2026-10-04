@@ -59,7 +59,7 @@ for _ in $(seq 1 20); do
   sleep 1
 done
 
-docker compose -f "$COMPOSE" run --rm sqo-agent python -c \
+docker compose -f "$COMPOSE" exec -T sqo-agent python -c \
   'import boto3; from botocore.config import Config; c=boto3.client("s3",endpoint_url="http://localstack:4566",region_name="us-east-1",config=Config(s3={"addressing_style":"path"})); print(c.list_objects_v2(Bucket="sqo",Prefix="slurm-quorum/telemetry").get("Contents", []))'
 
 echo 'compose SQO smoke complete'
