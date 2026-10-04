@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json, os, random, shutil, sqlite3, subprocess, tempfile, time, uuid
+import json, os, random, shlex, shutil, sqlite3, subprocess, tempfile, time, uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -395,7 +395,7 @@ class SlurmBackend:
     def __init__(self,partition='gpu',dry_run=False):self.partition=partition;self.dry_run=dry_run
     def script(self,job):
         env='\n'.join(f'export {k}={json.dumps(v)}' for k,v in sorted(job.env.items()))
-        cmd=' '.join(subprocess.list2cmdline([x]) for x in job.command)
+        cmd=shlex.join(str(x) for x in job.command)
         partition=job.partition or self.partition
         wall_minutes, wall_seconds = divmod(job.time_limit_s, 60)
         lines=[
