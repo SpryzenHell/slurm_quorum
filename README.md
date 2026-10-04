@@ -352,6 +352,12 @@ queued -> running -> succeeded
 
 A Slurm-backed job additionally records its scheduler ID and the last observed Slurm state/exit code.
 
+## Redis claim flow
+
+![Redis claim and lease flow](docs/assets/queue-claim.svg)
+
+A Redis claim is a lease, not the source of durable job state. Once the claim is adopted, SQLite WAL becomes the local execution journal. If a worker disappears before acknowledgement, the Redis lease can expire and another worker can take the job.
+
 ## Telemetry
 
 Telemetry is produced from the SQLite event journal rather than from an independent best-effort stream.
@@ -363,7 +369,9 @@ The replicator:
 3. flushes the sink; and only then
 4. advances the cursor in SQLite.
 
-The S3 sink writes immutable gzip-compressed JSONL segments using deterministic sequence ranges and conditional object creation. This makes a repeated upload after a process failure safe to retry.
+The S3 sink writes immutable gzip-compressed JSONL segments using deterministic sequence ranges and conditional object creation. Segments are namespaced by node so that each node's SQLite sequence numbers cannot collide in a shared bucket.
+
+![Telemetry durability flow](docs/assets/telemetry.svg)
 
 ## Repository layout
 
