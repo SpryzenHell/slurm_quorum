@@ -54,8 +54,13 @@ class S3TelemetrySink:
         compressed = gzip.compress(payload, mtime=0)
         sequences = [event.get("seq") for event in self.buffer]
         numeric = [int(seq) for seq in sequences if isinstance(seq, int)]
+        nodes = sorted({str(event.get("node_id", "unknown")) for event in self.buffer})
+        node_part = nodes[0].replace("/", "_").replace(" ", "_") if len(nodes) == 1 else "mixed"
         if numeric and len(numeric) == len(self.buffer):
-            key = f"{self.prefix}/segment-{numeric[0]}-{numeric[-1]}-{len(self.buffer)}.jsonl.gz"
+            key = (
+                f"{self.prefix}/{node_part}/"
+                f"segment-{numeric[0]}-{numeric[-1]}-{len(self.buffer)}.jsonl.gz"
+            )
         else:
             stamp = int(time.time() * 1_000_000)
             key = f"{self.prefix}/segment-{stamp}-{uuid.uuid4().hex[:12]}-{len(self.buffer)}.jsonl.gz"
