@@ -24,7 +24,7 @@ def test_s3_telemetry_batches_and_flushes():
     assert len(client.objects) == 1
     obj = client.objects[0]
     assert obj["Bucket"] == "bucket"
-    assert obj["Key"].startswith("sqo/telemetry/node-unknown/segment-")
+    assert obj["Key"].startswith("sqo/telemetry/unknown/segment-")
     assert obj["Key"].endswith(".jsonl.gz")
     assert obj["ContentType"] == "application/gzip"
 
