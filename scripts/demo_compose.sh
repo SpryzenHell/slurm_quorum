@@ -2,7 +2,17 @@
 set -euo pipefail
 
 COMPOSE='deploy/docker-compose.sqo.yml'
-cleanup(){ docker compose -f "$COMPOSE" down -v --remove-orphans >/dev/null 2>&1 || true; }
+cleanup(){
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    echo '== compose status =='
+    docker compose -f "$COMPOSE" ps || true
+    echo '== compose logs =='
+    docker compose -f "$COMPOSE" logs --no-color --tail 200 sqo-agent sqo-node-1 sqo-node-2 sqo-node-3 localstack s3-init || true
+  fi
+  docker compose -f "$COMPOSE" down -v --remove-orphans >/dev/null 2>&1 || true
+  exit "$status"
+}
 trap cleanup EXIT INT TERM
 
 docker compose -f "$COMPOSE" up -d --build
@@ -51,13 +61,16 @@ echo "ready=$ready inflight=$inflight"
 [ "$ready" = "0" ] && [ "$inflight" = "0" ]
 
 echo '== telemetry objects =='
+telemetry_ok=0
 for _ in $(seq 1 20); do
   if docker compose -f "$COMPOSE" exec -T sqo-agent python -c \
     'import boto3; from botocore.config import Config; c=boto3.client("s3",endpoint_url="http://localstack:4566",region_name="us-east-1",config=Config(s3={"addressing_style":"path"})); r=c.list_objects_v2(Bucket="sqo",Prefix="slurm-quorum/telemetry"); raise SystemExit(0 if r.get("Contents") else 1)'; then
+    telemetry_ok=1
     break
   fi
   sleep 1
 done
+[ "$telemetry_ok" -eq 1 ]
 
 docker compose -f "$COMPOSE" exec -T sqo-agent python -c \
   'import boto3; from botocore.config import Config; c=boto3.client("s3",endpoint_url="http://localstack:4566",region_name="us-east-1",config=Config(s3={"addressing_style":"path"})); print(c.list_objects_v2(Bucket="sqo",Prefix="slurm-quorum/telemetry").get("Contents", []))'
