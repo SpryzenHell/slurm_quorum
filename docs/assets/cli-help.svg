@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 470" role="img" aria-labelledby="t d">
+<title id="t">Installed SQO command line</title>
+<desc id="d">Actual sqo --help output captured from a clean editable package installation in GitHub Actions.</desc>
+<rect width="1120" height="470" fill="#f7f7f5"/>
+<rect x="35" y="28" width="1050" height="414" rx="6" fill="#151515"/>
+<circle cx="60" cy="55" r="6" fill="#ddd"/><circle cx="80" cy="55" r="6" fill="#aaa"/><circle cx="100" cy="55" r="6" fill="#777"/>
+<style>text{font-family:Arial,sans-serif;fill:#ececec}.title{font-size:18px}.mono{font-family:Consolas,monospace;font-size:17px}</style>
+<text x="130" y="61" class="title">sqo --help</text>
+<line x1="50" y1="82" x2="1070" y2="82" stroke="#666"/>
+<text x="55" y="120" class="mono">usage: sqo [-h] {load,failover,serve} ...</text>
+<text x="55" y="150" class="mono">Slurm-Quorum Orchestrator control-plane tools.</text>
+<text x="55" y="190" class="mono">positional arguments:</text>
+<text x="55" y="218" class="mono">  {load,failover,serve}</text>
+<text x="55" y="246" class="mono">    load       run the local SQLite-WAL throughput demonstration</text>
+<text x="55" y="274" class="mono">    failover   run the local three-node election/failover demonstration</text>
+<text x="55" y="302" class="mono">    serve      start one quorum node</text>
+<text x="55" y="342" class="mono">options:</text>
+<text x="55" y="370" class="mono">  -h, --help  show this help message and exit</text>
+<text x="55" y="410" class="mono">Captured from a clean package install in GitHub Actions.</text>
+</svg>
