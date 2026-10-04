@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500" role="img" aria-labelledby="t d">
+<title id="t">Local quorum failover verification</title><desc id="d">Terminal output captured from GitHub Actions run 188 for the Slurm-Quorum Orchestrator.</desc>
+<rect width="900" height="500" fill="#f7f7f5"/>
+<rect x="35" y="28" width="830" height="444" rx="6" fill="#151515"/>
+<circle cx="60" cy="55" r="6" fill="#ddd"/><circle cx="80" cy="55" r="6" fill="#aaa"/><circle cx="100" cy="55" r="6" fill="#777"/>
+<text x="130" y="61" class="title">PYTHONPATH=. python -m sqo_orchestrator failover --root .sqo/ci-failover</text>
+<line x1="50" y1="82" x2="850" y2="82" stroke="#777"/>
+<text x="55" y="120" class="mono">{</text><text x="55" y="148" class="mono">  &quot;failed&quot;: &quot;node-1&quot;,</text><text x="55" y="176" class="mono">  &quot;failover&quot;: {</text><text x="55" y="204" class="mono">    &quot;term&quot;: 2,</text><text x="55" y="232" class="mono">    &quot;votes&quot;: 2,</text><text x="55" y="260" class="mono">    &quot;winner&quot;: &quot;node-2&quot;</text><text x="55" y="288" class="mono">  },</text><text x="55" y="316" class="mono">  &quot;initial&quot;: {</text><text x="55" y="344" class="mono">    &quot;term&quot;: 1,</text><text x="55" y="372" class="mono">    &quot;votes&quot;: 3,</text><text x="55" y="400" class="mono">    &quot;winner&quot;: &quot;node-1&quot;</text><text x="55" y="428" class="mono">  },</text><text x="55" y="456" class="mono">  &quot;majority&quot;: 2,</text><text x="55" y="484" class="mono">  &quot;new_leader&quot;: &quot;node-2&quot;</text><text x="55" y="512" class="mono">}</text>
+</svg>
