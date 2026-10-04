@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-labelledby="t d">
+<title id="t">SQO Redis claim and lease flow</title>
+<desc id="d">A job moves from a Redis ready sorted set to an inflight owner and lease, is adopted into SQLite, and returns to ready state when the lease expires.</desc>
+<rect width="1200" height="360" fill="#f7f7f5"/>
+<style>text{font-family:Arial,sans-serif;fill:#202020}.box{fill:#fff;stroke:#222;stroke-width:2}.label{font-size:24px;font-weight:600}.small{font-size:17px}.line{stroke:#333;stroke-width:2;fill:none;marker-end:url(#a)}.dash{stroke:#555;stroke-width:2;stroke-dasharray:7 7;fill:none;marker-end:url(#a)}</style>
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#333"/></marker></defs>
+<text x="45" y="45" font-size="32" font-weight="700">Redis admission and claim flow</text>
+<rect class="box" x="45" y="105" width="210" height="95" rx="4"/><text class="label" x="150" y="145" text-anchor="middle">Ready ZSET</text><text class="small" x="150" y="173" text-anchor="middle">priority score + job ID</text>
+<rect class="box" x="350" y="105" width="220" height="95" rx="4"/><text class="label" x="460" y="145" text-anchor="middle">Lua claim</text><text class="small" x="460" y="173" text-anchor="middle">atomic server-side move</text>
+<rect class="box" x="665" y="80" width="210" height="145" rx="4"/><text class="label" x="770" y="120" text-anchor="middle">Inflight</text><text class="small" x="770" y="150" text-anchor="middle">owner = worker</text><text class="small" x="770" y="177" text-anchor="middle">lease = expiry</text><text class="small" x="770" y="204" text-anchor="middle">Redis TIME</text>
+<rect class="box" x="970" y="105" width="180" height="95" rx="4"/><text class="label" x="1060" y="145" text-anchor="middle">SQLite WAL</text><text class="small" x="1060" y="173" text-anchor="middle">local adoption</text>
+<path class="line" d="M255 152 H350"/><path class="line" d="M570 152 H665"/><path class="line" d="M875 152 H970"/>
+<path class="dash" d="M770 225 V300 H150 V200"/>
+<text class="small" x="460" y="333" text-anchor="middle">Expired claim → remove inflight owner/lease → restore original ready score</text>
+</svg>
