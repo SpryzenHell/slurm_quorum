@@ -24,6 +24,6 @@ That local benchmark supports “60K workloads demonstrated” but does not esta
 
 The repository now also contains a shared Redis admission queue, a Redis lease-reaper, a Redis-to-Slurm agent, deterministic Slurm attempt identity, Slurm state reconciliation through squeue/sacct, retry re-enqueue, a batched S3 telemetry sink, and production deployment templates.
 
-The GitHub Actions workflow has already passed the core nine-step control-plane suite on the branch, including Python tests, compile checks, failover demo, a 10K concurrent workload, and the three-process network election/failover smoke. New Redis/Slurm integration tests are being exercised in the current CI queue.
+The completed GitHub Actions control-plane run recorded passing Python tests, compilation, SQO shell syntax, Compose configuration, quorum failover, a 10K concurrent SQLite-WAL workload, and the three-process network election/failover smoke. The workflow also checks that the installable `sqo` command is available from a clean editable install and exercises the Docker Compose S3 lab.
 
-Current evidence still stops short of a real Slurm/DGX execution record and a live AWS S3 bucket test. Those require an environment with Slurm controller/accounting services and AWS credentials.
+Current evidence still stops short of a real Slurm/DGX execution record and a live AWS S3 bucket test. Those require an environment with Slurm controller/accounting services, a real Redis/Valkey service, AWS-compatible credentials, and cluster-specific configuration.
