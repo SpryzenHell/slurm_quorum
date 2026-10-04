@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 470" role="img" aria-labelledby="t d">
 <title id="t">Installed SQO command line</title>
-<desc id="d">Actual sqo --help output captured from a clean editable package installation in GitHub Actions.</desc>
+<desc id="d">Actual sqo --help output captured from GitHub Actions run 238 after a clean editable package installation.</desc>
 <rect width="1120" height="470" fill="#f7f7f5"/>
 <rect x="35" y="28" width="1050" height="414" rx="6" fill="#151515"/>
 <circle cx="60" cy="55" r="6" fill="#ddd"/><circle cx="80" cy="55" r="6" fill="#aaa"/><circle cx="100" cy="55" r="6" fill="#777"/>

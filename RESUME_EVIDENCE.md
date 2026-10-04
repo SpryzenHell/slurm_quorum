@@ -15,7 +15,7 @@ Latest local evidence:
 - 8 worker threads.
 - 60,000 successful completions.
 - 180,000 job events replicated.
-- 9,231 jobs/s measured on the current development environment.
+- 9,231 jobs/s measured on the current development environment; the latest CI benchmark recorded 4,502.97 jobs/s with 4 workers.
 
 That local benchmark supports “60K workloads demonstrated” but does not establish “60K monthly HPC workloads across DGX clusters.” That stronger statement should be retained only with real cluster records.
 
@@ -24,6 +24,6 @@ That local benchmark supports “60K workloads demonstrated” but does not esta
 
 The repository now also contains a shared Redis admission queue, a Redis lease-reaper, a Redis-to-Slurm agent, deterministic Slurm attempt identity, Slurm state reconciliation through squeue/sacct, retry re-enqueue, a batched S3 telemetry sink, and production deployment templates.
 
-The completed GitHub Actions control-plane run recorded passing Python tests, compilation, SQO shell syntax, Compose configuration, quorum failover, a 10K concurrent SQLite-WAL workload, and the three-process network election/failover smoke. The workflow also checks that the installable `sqo` command is available from a clean editable install and exercises the Docker Compose S3 lab.
+GitHub Actions run 238 recorded 30 passing Python tests, compilation, SQO shell syntax, Compose configuration, quorum failover, a 10K concurrent SQLite-WAL workload, and the three-process network election/failover smoke. The workflow also checks that the installable `sqo` command is available from a clean editable install and exercises the Docker Compose S3 lab.
 
 Current evidence still stops short of a real Slurm/DGX execution record and a live AWS S3 bucket test. Those require an environment with Slurm controller/accounting services, a real Redis/Valkey service, AWS-compatible credentials, and cluster-specific configuration.

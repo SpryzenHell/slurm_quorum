@@ -472,12 +472,12 @@ Stop the existing local cluster processes or change the bind addresses in your o
 
 ## Verified repository evidence
 
-The repository's latest completed green control-plane run recorded the following observed results; newer workflow runs also exercise fresh package installation and the Docker Compose integration path:
+The completed GitHub Actions verification run 238 recorded the following observed results:
 
 
 | Check | Result |
 | --- | --- |
-| Python tests | 28 passed in 0.57 s |
+| Python tests | 30 passed in 0.45 s |
 | Python compilation | Passed |
 | SQO shell syntax checks | Passed |
 | Docker Compose configuration | Passed |
@@ -485,13 +485,17 @@ The repository's latest completed green control-plane run recorded the following
 | 10,000-job SQLite-WAL load | 10,000 succeeded, 30,000 telemetry events |
 | Three-process network failover | node-1 failed; node-3 became leader |
 
-The 10,000-job run reported approximately 4,480 jobs/s on the CI runner. Earlier development runs also recorded a local 60,000-job synthetic run at about 9.23K jobs/s. These are development/CI measurements, not production DGX throughput claims.
+The 10,000-job run reported 4,502.97 jobs/s on the CI runner. Earlier development runs also recorded a local 60,000-job synthetic run at about 9.23K jobs/s. These are development/CI measurements, not production DGX throughput claims.
 
 The current repository deliberately does not claim a live AWS bucket result or a live DGX/Slurm production workload record when those environments are not available.
 
 ## Verified snapshots
 
-The following images reproduce exact output captured from the CI run above. They are kept with the repository so that the README documents observed behavior rather than simulated UI.
+The following images reproduce exact output captured from GitHub Actions run 238. They are kept with the repository so that the README documents observed behavior rather than simulated UI.
+
+### Installed command
+
+![Verified sqo CLI help](docs/assets/cli-help.svg)
 
 ### Test suite
 
