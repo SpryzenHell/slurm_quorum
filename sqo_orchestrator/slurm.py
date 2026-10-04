@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import shlex
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -78,9 +79,7 @@ class SlurmClient:
         env = "\n".join(
             f"export {key}={json.dumps(value)}" for key, value in sorted(job.env.items())
         )
-        command = " ".join(
-            subprocess.list2cmdline([str(part)]) for part in job.command
-        )
+        command = shlex.join(str(part) for part in job.command)
         wall_minutes = max(1, (job.time_limit_s + 59) // 60)
         partition = job.partition or self.partition
         lines = [
