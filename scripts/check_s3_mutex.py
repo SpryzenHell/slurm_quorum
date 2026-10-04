@@ -9,8 +9,11 @@ from sqo_orchestrator.core import S3Lease
 
 
 def contender(args):
-    bucket, prefix, endpoint, region, resource, owner = args
-    lease = S3Lease(bucket, prefix, endpoint_url=endpoint, region_name=region)
+    bucket, prefix, endpoint, region, resource, owner, force_path_style = args
+    lease = S3Lease(
+        bucket, prefix, endpoint_url=endpoint, region_name=region,
+        force_path_style=force_path_style,
+    )
     record = lease.acquire(resource, owner, int(os.getpid()), 20)
     return {
         'owner': owner,
@@ -25,11 +28,12 @@ p.add_argument('--prefix', default='slurm-quorum')
 p.add_argument('--endpoint-url', default=os.environ.get('SQO_S3_ENDPOINT_URL'))
 p.add_argument('--region', default=os.environ.get('SQO_S3_REGION', 'us-east-1'))
 p.add_argument('--contenders', type=int, default=3)
+p.add_argument('--force-path-style', action='store_true')
 args = p.parse_args()
 
 resource = 'smoke-' + uuid.uuid4().hex
 jobs = [
-    (args.bucket, args.prefix, args.endpoint_url, args.region, resource, f'contender-{i}')
+    (args.bucket, args.prefix, args.endpoint_url, args.region, resource, f'contender-{i}', args.force_path_style)
     for i in range(args.contenders)
 ]
 with mp.Pool(args.contenders) as pool:
