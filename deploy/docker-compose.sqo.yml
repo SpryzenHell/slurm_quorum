@@ -9,7 +9,7 @@ services:
       - redis-data:/data
 
   localstack:
-    image: localstack/localstack:2026.08.0
+    image: localstack/localstack:2026.08.3
     restart: unless-stopped
     environment:
       SERVICES: s3
