@@ -504,6 +504,13 @@ class Orchestrator:
     def renew_master(self):
         if not getattr(self,'master',False):return False
         r=self.lease.renew('cluster-master',self.node_id,self.term,self.lease_ttl); self.master=bool(r); return self.master
+    def release_master(self):
+        if not getattr(self, 'master', False):
+            return False
+        released = self.lease.release('cluster-master', self.node_id, self.term)
+        if released:
+            self.master = False
+        return released
     def load(self,jobs,workers=8):
         self.db.submit_many(JobSpec(job_id=f'job-{i:06d}',command=['true'],queue='gpu',priority=i%4,metadata={'index':i}) for i in range(jobs))
         stop=Event()
