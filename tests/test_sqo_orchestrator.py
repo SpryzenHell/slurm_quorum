@@ -29,3 +29,15 @@ def test_higher_term_does_not_assign_fake_leader(tmp_path: Path):
     assert node.term == 7
     assert node.role == "follower"
     assert node.leader_id is None
+
+
+def test_local_load_releases_master_lease(tmp_path):
+    from sqo_orchestrator.core import Orchestrator
+
+    first = Orchestrator(tmp_path, node_id="node-1", lease_ttl_s=30)
+    assert first.acquire_master() is True
+    first.release_master()
+
+    second = Orchestrator(tmp_path, node_id="node-2", lease_ttl_s=30)
+    assert second.acquire_master() is True
+    assert second.release_master() is True
