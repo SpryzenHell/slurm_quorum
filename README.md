@@ -1,339 +1,527 @@
 # Slurm-Quorum Orchestrator
 
-## Overview
+<p align="center"><img src="main.png" alt="Slurm-Quorum Orchestrator project overview" width="900"></p>
 
-The **Slurm-Quorum Orchestrator** integrates a high-throughput, Redis/Valkey-backed job queueing system with a standalone disaster recovery and replication tool for SQLite databases. It is designed to orchestrate heavy workloads across distributed clusters while safely replicating database changes incrementally to another file or an S3 bucket.
+A small control plane for running GPU workloads through Redis and Slurm while keeping job state locally durable and coordinating a three-node master election.
 
-This framework has a low barrier to entry while scaling incredibly well for large applications. It can be integrated into your web stack easily, making it suitable for projects of any size—from simple applications to high-volume enterprise systems.
+The project is implemented in the `sqo_orchestrator/` package. The surrounding repository contains inherited/vendor material from the original project context; the SQO package is deliberately self-contained so it can be installed and run without installing the repository root as a whole.
 
-The Orchestrator requires Redis >= 5 or Valkey >= 7.2.
+## What is in the project
 
----
+| Component | Purpose | Local dependency | Production dependency |
+| --- | --- | --- | --- |
+| Redis queue | Shared admission queue, priority ordering, claim leases | Redis or Docker | Redis / Valkey |
+| SQLite WAL | Node-local job journal and ownership fencing | Built into Python | Local persistent disk |
+| Quorum service | Three-node leader election and heartbeat transport | Python HTTP server | Three reachable nodes + S3 lease |
+| Slurm agent | Submit, reconcile, retry and recover jobs | Optional dry-run | Slurm `sbatch`, `squeue`, `sacct` |
+| Telemetry | Append-only event export | Local files | S3-compatible object storage |
 
-# Part I: Distributed Job Queueing & Execution
+The control plane is intentionally separate from the Slurm scheduler. It does not replace Slurm, and the embedded quorum code is the leader-election/heartbeat portion needed by this project rather than a complete Raft log-replication implementation.
 
-## Getting started
+## First run
 
-First, run a Redis/Valkey server:
+### Requirements
 
-```console
-$ redis-server
+For the local project checks:
 
+- Python 3.11 or newer
+- Git
+- Bash on Linux, macOS, or WSL
+
+Redis is **not required** for the local failover, WAL, or throughput demonstrations.
+
+For the distributed queue and Slurm path, also install Redis/Valkey. For the Docker lab, install Docker with the Compose plugin. For a real scheduler run, the machine running the agent must have `sbatch`, `squeue`, and `sacct` available.
+
+### Values to provide for a real deployment
+
+The repository is complete for local and container execution. A real cluster deployment still needs environment-specific values:
+
+| Value | Where it is used |
+| --- | --- |
+| Redis/Valkey address and credentials | Shared job admission |
+| Three node addresses and unique node IDs | Quorum service |
+| S3 bucket, region and AWS role/credentials | Master fencing and telemetry |
+| Slurm partition and site-specific QoS/constraints | Scheduler submission |
+| Persistent filesystem locations | SQLite WAL and service state |
+
+These values remain placeholders in `configs/` and `deploy/`. They are the only deployment inputs that cannot be inferred from source code.
+
+### Option A — one command
+
+From the repository root:
+
+```bash
+bash scripts/quickstart.sh
 ```
 
-To put jobs on queues, you don't have to do anything special, just define your typically lengthy or blocking function:
+This creates `.venv/` when needed, installs the SQO package with its test dependencies, runs the test suite, runs the quorum failover demonstration, runs a 1,000-job local WAL load, and runs the three-process network failover smoke test.
 
-```python
-import requests
+### Option B — manual setup
 
-def count_words_at_url(url):
-    """Just an example function that's called async."""
-    resp = requests.get(url)
-    return len(resp.text.split())
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 
+python -m pip install --upgrade pip
+python -m pip install -e "./sqo_orchestrator[test]"
 ```
 
-Then, create a Queue:
+The package installs a normal `sqo` command:
 
-```python
-from redis import Redis
-from slurm_quorum import Queue
-
-queue = Queue(connection=Redis())
-
+```bash
+sqo --help
 ```
 
-And enqueue the function call:
+The module form remains available:
 
-```python
-from my_module import count_words_at_url
-job = queue.enqueue(count_words_at_url, '[https://example.com](https://example.com)')
-
+```bash
+python -m sqo_orchestrator --help
 ```
 
-## Job Prioritization
+On Windows, the Python commands above work in PowerShell; the Bash scripts can be run from WSL.
 
-By default, jobs are added to the end of a single queue. The Orchestrator offers two ways to give certain jobs higher priority:
+## Verify the installation
 
-#### 1. Enqueue at the front
+Run the same checks used by the repository CI job:
 
-You can enqueue a job at the front of its queue so it’s picked up before other jobs:
+```bash
+python -m pytest -q
+python -m py_compile sqo_orchestrator/*.py scripts/*.py
 
-```python
-job = queue.enqueue(count_words_at_url, '[https://example.com](https://example.com)', at_front=True)
-
+bash scripts/check_3node_local.sh .sqo/network-check
 ```
 
-#### 2. Use multiple Queues
+The local checks create their files below `.sqo/`. That directory is disposable and should not be committed.
 
-You can create multiple queues and enqueue jobs into different queues based on their priority:
+## Local quorum failover
 
-```python
-from slurm_quorum import Queue
-high_priority_queue = Queue('high', connection=Redis())
-low_priority_queue = Queue('low', connection=Redis())
+The smallest demonstration does not require Redis or Slurm:
 
-# This job will be picked up before jobs in the low priority queue
-# even if it was enqueued later
-high_priority_queue.enqueue(urgent_task)
-low_priority_queue.enqueue(non_urgent_task)
-
+```bash
+sqo failover --root .sqo/failover
 ```
 
-Then start workers with a prioritized queue list:
+A normal result contains:
 
-```console
-$ orchestrator worker high low
-
+```json
+{
+  "failed": "node-1",
+  "failover": {
+    "term": 2,
+    "votes": 2,
+    "winner": "node-2"
+  },
+  "majority": 2,
+  "new_leader": "node-2"
+}
 ```
 
-This command starts a worker that listens to both `high` and `low` queues. The worker will process jobs from the `high` queue first, followed by the `low` queue. You can also run different workers for different queues, allowing you to scale your workers based on the number of jobs in each queue.
+The implementation stores the current term and vote in each node's SQLite database. A three-node cluster therefore requires two votes for a leader.
 
-## Scheduling Jobs
+## Three-node network mode
 
-Scheduling jobs is also easy:
+For an actual three-process local network test:
 
-```python
-# Schedule job to run at 9:15, October 10th
-job = queue.enqueue_at(datetime(2019, 10, 10, 9, 15), say_hello)
-
-# Schedule job to run in 10 seconds
-job = queue.enqueue_in(timedelta(seconds=10), say_hello)
-
+```bash
+bash scripts/check_3node_local.sh .sqo/network
 ```
 
-## Repeating Jobs
+The script:
 
-To execute a `Job` multiple times, use the `Repeat` class:
+1. starts three HTTP quorum nodes on ports 8111, 8112 and 8113;
+2. waits for exactly one leader;
+3. terminates the elected leader;
+4. waits for a different leader on the remaining two nodes; and
+5. exits non-zero if the election or failover does not converge.
 
-```python
-from slurm_quorum import Queue, Repeat
+To keep the three processes running instead of using the smoke test:
 
-# Repeat job 3 times after successful execution, with 30 second intervals
-queue.enqueue(my_function, repeat=Repeat(times=3, interval=30))
-
-# Repeat job 3 times with different intervals between runs
-queue.enqueue(my_function, repeat=Repeat(times=3, interval=[5, 10, 15]))
-
+```bash
+bash scripts/start_3node_local.sh .sqo/cluster
 ```
 
-## Unique Jobs
+In another terminal:
 
-You can prevent duplicate jobs from being enqueued by using the `unique` parameter:
-
-```python
-job = queue.enqueue(send_email, user_id, job_id='welcome-42', unique=True)
-
+```bash
+curl http://127.0.0.1:8101/health
+curl http://127.0.0.1:8102/health
+curl http://127.0.0.1:8103/health
 ```
 
-## Rate Limiting
+Each response contains the node ID, role, current term and known leader.
 
-The Orchestrator adds concurrency-based rate limits for jobs sharing a key:
+The local cluster uses a file-based lease. That lease is suitable for a single-machine demonstration only. In a multi-machine deployment, use the S3 lease described below.
 
-```python
-from slurm_quorum import RateLimit
+## Local WAL throughput test
 
-queue.enqueue(generate_report, rate_limit=RateLimit(key='reports', concurrency=2))
+The project includes a synthetic throughput command:
 
+```bash
+sqo load --jobs 10000 --workers 4 --root .sqo/load
 ```
 
-## Retrying Failed Jobs
+For the larger resume-oriented demonstration:
 
-Retrying failed jobs is also supported:
-
-```python
-from slurm_quorum import Retry
-
-# Retry up to 3 times, failed job will be requeued immediately
-queue.enqueue(say_hello, retry=Retry(max=3))
-
-# Retry up to 3 times, with configurable intervals between retries
-queue.enqueue(say_hello, retry=Retry(max=3, interval=[10, 30, 60]))
-
+```bash
+bash scripts/benchmark_60k.sh 60000 8
 ```
 
-## Webhooks
+This test exercises SQLite WAL, short write transactions, worker ownership checks, and telemetry replication. It is a local synthetic benchmark. It is **not** a substitute for a production DGX workload record.
 
-The Orchestrator can send an HTTP request to a URL when a job finishes or fails, without writing a callback function:
+## Redis admission queue
 
-```python
-from slurm_quorum import Webhook
+Start Redis:
 
-queue.enqueue(
-    say_hello,
-    webhooks=[
-        Webhook('[https://example.com/finished](https://example.com/finished)', job_status='finished'),
-        Webhook('[https://example.com/failed](https://example.com/failed)', job_status='failed', method='POST'),
-    ],
-)
-
+```bash
+redis-server
 ```
 
-## Interval and Cron Job Scheduling
+Then submit a job:
 
-The system provides built-in job scheduling functionality that supports both simple interval-based scheduling and flexible cron syntax.
-
-First, create a configuration file (e.g., `cron_config.py`) that defines the jobs you want to run periodically.
-
-```python
-from slurm_quorum import cron
-from myapp import cleanup_temp_files, generate_analytics_report
-
-# Clean up temporary files every 30 minutes
-cron.register(
-    cleanup_temp_files,
-    queue_name='maintenance',
-    interval=1800  # 30 minutes in seconds
-)
-
-# Generate analytics report every 6 hours
-cron.register(
-    generate_analytics_report,
-    queue_name='reports',
-    args=('daily_metrics',),
-    kwargs={'format': 'json', 'recipients': ['bob@example.com']},
-    interval=21600  # 6 hours in seconds
-)
-
+```bash
+python scripts/enqueue_job.py \
+  --redis-url redis://127.0.0.1:6379/0 \
+  --queue gpu \
+  --priority 10 \
+  --gpus 2 \
+  --gpu-type h100 \
+  --cpus 8 \
+  --memory-mb 32768 \
+  --partition dgx-h100 \
+  --qos research \
+  --constraint ram256g \
+  --retries 1 \
+  -- python train.py --steps 100
 ```
 
-And then start the `cron` command to enqueue these jobs at specified intervals:
+The command stores the serialized job in Redis and places its ID in a queue-specific priority sorted set.
 
-```sh
-$ orchestrator cron cron_config.py
+Claims are performed by a Redis Lua script. A claim moves one job from the ready set into an inflight owner record and assigns a lease expiry using Redis server time. A worker can renew its own lease, and another worker can return an expired claim to the ready queue.
 
+## Slurm agent
+
+The agent bridges Redis claims into the local SQLite journal and then to Slurm.
+
+For a safe first run, use the dry-run mode:
+
+```bash
+python scripts/run_slurm_agent.py \
+  --redis-url redis://127.0.0.1:6379/0 \
+  --queue gpu \
+  --partition dgx \
+  --worker-id sqo-worker-1 \
+  --dry-run
 ```
 
-You can also use standard cron syntax for more flexible scheduling:
+For a real Slurm cluster, omit `--dry-run`:
 
-```python
-from slurm_quorum import cron
-from myapp import send_newsletter, backup_database
-
-# Database backup every day at 3:00 AM
-cron.register(
-    backup_database,
-    queue_name='maintenance',
-    cron='0 3 * * *'
-)
-
-# Monthly report on the first day of each month at 8:00 AM
-cron.register(
-    generate_monthly_report,
-    queue_name='reports',
-    cron='0 8 1 * *'
-)
-
+```bash
+python scripts/run_slurm_agent.py \
+  --redis-url redis://redis.example:6379/0 \
+  --queue gpu \
+  --partition dgx \
+  --worker-id sqo-worker-1
 ```
 
-Cron jobs can also send webhooks to a monitoring endpoint when a scheduled run finishes or fails:
+The production client uses:
 
-```python
-from slurm_quorum import cron, Webhook
+- `sbatch --parsable` for submission;
+- `squeue` for live state;
+- `sacct` for accounting after a job leaves the live queue; and
+- `scancel` for cleanup when SQO loses ownership before a scheduler ID can be recorded.
 
-# Ping a monitoring endpoint after the nightly backup finishes or fails
-cron.register(
-    backup_database,
-    queue_name='maintenance',
-    cron='0 3 * * *',
-    webhooks=[
-        Webhook('[https://example.com/finished](https://example.com/finished)', 'finished'),
-        Webhook('[https://example.com/failed](https://example.com/failed)', 'failed'),
-    ],
-)
+Every attempt has deterministic SQO identity in the Slurm job name/comment. This is used to avoid treating a late or duplicated submission as a new independent job.
 
+### Direct Slurm smoke test
+
+When connected to a real Slurm cluster:
+
+```bash
+python scripts/check_slurm_cluster.py --partition dgx
 ```
 
-### The Worker
+The smoke test submits a small job that prints `SQO_SLURM_SMOKE_OK`, waits for the terminal state, and checks for a successful exit code.
 
-To start executing enqueued function calls in the background, start a worker from your project's directory:
+## Docker Compose lab
 
-```console
-$ orchestrator worker --with-scheduler
-*** Listening for work on default
-Got count_words_at_url('[http://example.com](http://example.com)') from default
-Job result = 818
-*** Listening for work on default
+The repository contains a complete local lab with:
 
+- Redis with AOF enabled;
+- LocalStack as the local S3 API;
+- three SQO quorum nodes;
+- one SQO Redis-to-Slurm agent in dry-run mode.
+
+Start it with:
+
+```bash
+docker compose -f deploy/docker-compose.sqo.yml up -d --build
 ```
 
-To run multiple workers in production, use process managers like `systemd`. The engine also ships with a `worker-pool` that lets you run multiple worker processes with a single command.
+Or run the repository smoke script:
 
-```console
-$ orchestrator worker-pool -n 4
-
+```bash
+bash scripts/demo_compose.sh
 ```
 
-## Security
+The repository also contains a manual GitHub Actions workflow, `sqo-compose.yml`, for running the same Docker integration test on an Ubuntu runner. The normal pull-request workflow validates the Compose file but does not pull the large LocalStack image on every code change.
 
-> **Warning:** The default configuration uses `pickle` as its default serializer, **which is not secure**. Only run this against Redis instances that you trust. It is possible to construct malicious pickle data that will execute arbitrary code during unpickling.
+Check the quorum nodes:
 
-To avoid pickle, use an alternative serializer, such as `JSONSerializer`, when enqueueing and processing jobs. JSON only supports primitive argument types (str, int, float, bool, list, dict, None).
-
-## Notes on Performance
-
-**TL;DR — run `Worker` or `SpawnWorker` in production.**
-
-In a simple hello world microbenchmark, `SimpleWorker` processed 1,000 jobs in just 1.02 seconds vs. 6.64 seconds with the default `Worker`), more than 6x faster.
-
-`SimpleWorker` is faster because it skips `fork()` or `spawn()` and runs jobs in process. `Worker` and `SpawnWorker` run each job in a separate process, acting as a sandbox that isolates crashes, memory leaks and enforce hard time-outs.
-
-Although `SimpleWorker` is faster in benchmarks, this overhead is negligible in most real world applications like sending emails, generating reports, processing images, etc. In production systems, the time spent performing jobs usually dwarfs any queueing/worker overhead.
-
-Use `SimpleWorker` in production only if:
-
-* Your jobs are extremely short-lived (single digit milliseconds).
-* The `fork()` or `spawn()` latency is a proven bottleneck at your traffic levels.
-* Your job code is 100% trusted and known to be free of resource leaks and the possibility of crashing/segfaults.
-
----
-
-# Part II: SQLite Disaster Recovery & Replication
-
-## Database Synchronization
-
-The second half of the Slurm-Quorum Orchestrator is a standalone disaster recovery tool for SQLite. Because SQLite utilizes a standard rollback journal or Write-Ahead Log (WAL), concurrent cluster operations can frequently result in `database is locked` states.
-
-The Orchestrator safely bridges this by running as a background process and safely replicating changes incrementally to another file or an S3 compatible blob storage. It only communicates with SQLite through the standard SQLite API so it will not corrupt your database during transient ISP drops.
-
-## Replication Principles
-
-* **Asynchronous WAL Tail Replicaton:** The orchestrator binds to the SQLite Write-Ahead Log (`-wal` file). When cluster nodes execute job state writes, the process reads the tail of the WAL file and serializes it into compressed data frames.
-* **Distributed Quorum Mutex:** To prevent split-brain network failures, a 3-Ping Quorum Consensus protocol mathematically guarantees that failover sequences only occur if a strictly overlapping majority of nodes can confirm that the primary master node is down.
-* **Point-in-Time Recovery (PiTR):** If a job crashes and corrupts the central dataset, the orchestrated S3 logs can be replayed to reconstruct the database state to any specific microsecond prior to the failure.
-
-## Installation
-
-Simply use the following command to install the latest released version of the complete orchestrator:
-
-```console
-$ pip install slurm-quorum
-
+```bash
+curl http://127.0.0.1:8101/health
+curl http://127.0.0.1:8102/health
+curl http://127.0.0.1:8103/health
 ```
+
+Submit a compose smoke job:
+
+```bash
+docker compose -f deploy/docker-compose.sqo.yml run --rm sqo-agent \
+  python /app/scripts/enqueue_job.py \
+  --redis-url redis://redis:6379/0 \
+  --queue gpu \
+  --namespace sqo \
+  --job-id compose-smoke \
+  -- python -c 'print("SQO_COMPOSE_SMOKE_OK")'
+```
+
+Stop the lab:
+
+```bash
+docker compose -f deploy/docker-compose.sqo.yml down -v --remove-orphans
+```
+
+The Compose lab uses LocalStack for the S3 API and Slurm dry-run mode. It validates queue admission, SQLite WAL state, S3 fencing, telemetry upload and agent reconciliation without pretending that a Slurm controller exists inside the Compose network.
+
+## S3 fencing and telemetry
+
+For production-style fencing, each quorum node uses a shared S3 object as the master lease.
+
+The acquisition path uses conditional object creation. Renewal and release are protected by the current object ETag. Expired takeover reads the lease and conditionally removes the previous owner before attempting a fresh conditional create.
+
+Create or select a private S3 bucket, then adapt:
+
+```text
+deploy/aws/sqo-s3-iam-policy.json
+deploy/aws/sqo-bucket-policy.example.json
+```
+
+The IAM policy is intentionally limited to the lock and telemetry prefixes. Replace `YOUR_BUCKET` before use.
+
+Start each quorum node with the same bucket and prefix but a different node ID and bind address:
+
+```bash
+python -m sqo_orchestrator serve \
+  --bind 10.0.0.11:8101 \
+  --peers '{"node-2":"http://10.0.0.12:8102","node-3":"http://10.0.0.13:8103"}' \
+  --root /var/lib/slurm-quorum/node-1 \
+  --s3-bucket YOUR_BUCKET \
+  --s3-prefix slurm-quorum \
+  --s3-region ap-south-1
+```
+
+Repeat on nodes 2 and 3 with their own node ID and bind address.
+
+For an S3-compatible endpoint such as MinIO, add:
+
+```bash
+--s3-endpoint-url http://minio:9000 --s3-force-path-style
+```
+
+The host clocks used to calculate lease expiry must be kept synchronized in a real deployment.
+
+## Production topology
+
+![SQO architecture](docs/assets/architecture.svg)
+
+A typical deployment separates shared admission, local durable state, scheduling, and the quorum lease:
+
+| Layer | Responsibility |
+| --- | --- |
+| Submitter | Creates `JobSpec` records and enqueues them |
+| Redis / Valkey | Shared ready queue and worker claim leases |
+| SQO agent | Adopts the Redis claim into node-local SQLite and talks to Slurm |
+| SQLite WAL | Durable job state, ownership and event journal |
+| Slurm | Actual batch scheduling and execution |
+| Quorum nodes | Leader election and master fencing |
+| S3 / MinIO | Shared master lease and asynchronous telemetry |
+
+The quorum service and the Redis worker pool are separate concerns. Quorum provides master election/fencing; Redis provides distributed job admission and worker claim leases.
+
+## Data model
+
+The node-local SQLite database contains:
+
+| Table | Role |
+| --- | --- |
+| `jobs` | Current job state, ownership, attempts, scheduler ID and Slurm status |
+| `events` | Append-only event journal with monotonically increasing sequence numbers |
+| `meta` | Persistent term/vote and telemetry cursor information |
+
+A job moves through:
+
+![Job lifecycle](docs/assets/job-lifecycle.svg)
+
+```text
+queued -> running -> succeeded
+                  \-> failed
+                  \-> retry -> running
+```
+
+A Slurm-backed job additionally records its scheduler ID and the last observed Slurm state/exit code.
+
+## Redis claim flow
+
+![Redis claim and lease flow](docs/assets/queue-claim.svg)
+
+A Redis claim is a lease, not the source of durable job state. Once the claim is adopted, SQLite WAL becomes the local execution journal. If a worker disappears before acknowledgement, the Redis lease can expire and another worker can take the job.
+
+## Telemetry
+
+Telemetry is produced from the SQLite event journal rather than from an independent best-effort stream.
+
+The replicator:
+
+1. reads events after its durable sequence cursor;
+2. appends them to the configured sink;
+3. flushes the sink; and only then
+4. advances the cursor in SQLite.
+
+The S3 sink writes immutable gzip-compressed JSONL segments using deterministic sequence ranges and conditional object creation. Segments are namespaced by node so that each node's SQLite sequence numbers cannot collide in a shared bucket.
+
+![Telemetry durability flow](docs/assets/telemetry.svg)
+
+## Repository layout
+
+| Path | Description |
+| --- | --- |
+| `sqo_orchestrator/` | Installable SQO package |
+| `tests/` | Unit and integration tests |
+| `scripts/` | Local demos, smoke tests, job submission and agent runners |
+| `configs/` | Example environment/configuration files |
+| `deploy/` | Docker, systemd and AWS deployment material |
+| `docs/SQO_ARCHITECTURE.md` | Architecture notes |
+| `RESUME_EVIDENCE.md` | Evidence boundaries for resume claims |
+| `SLURM_QUORUM_ORCHESTRATOR.md` | Project-specific implementation summary |
+
+## Configuration
+
+The example files are:
+
+```text
+configs/sqo.env.example
+configs/slurm_quorum.toml.example
+```
+
+The command-line tools accept the important settings directly, which makes the examples easy to translate into systemd, containers or another process manager.
+
+For a systemd deployment, adapt:
+
+```text
+deploy/systemd/sqo-agent.service
+```
+
+Do not copy the example environment file unchanged into production; replace the placeholder bucket and cluster values.
+
+## Security and deployment notes
+
+The repository is intended to run inside a trusted cluster network. The quorum HTTP endpoints do not provide TLS or application-level authentication themselves. Put them on a private network or behind the site's normal authenticated transport before exposing them outside the cluster.
+
+Use a dedicated Redis/Valkey instance or authenticated/private network in production. The sample commands assume a reachable Redis server and do not configure Redis ACLs.
+
+For AWS, give the runtime identity only the S3 permissions it needs. Review the example bucket policy before applying it to an existing bucket.
+
+## Troubleshooting
+
+### `sqo: command not found`
+
+Activate the virtual environment and install the package:
+
+```bash
+source .venv/bin/activate
+python -m pip install -e "./sqo_orchestrator"
+```
+
+### `No module named sqo_orchestrator`
+
+Run commands from the repository root after installing the package, or use:
+
+```bash
+PYTHONPATH=. python -m sqo_orchestrator --help
+```
+
+### Redis connection errors
+
+Start Redis:
+
+```bash
+redis-server
+```
+
+or use the Redis service in the Compose lab.
+
+### Slurm command not found
+
+A real submission needs `sbatch`, `squeue`, and `sacct`. Use `--dry-run` for local testing when a Slurm controller is not available.
+
+### S3 access denied
+
+Check the bucket name, AWS credentials/role, region, lock prefix, telemetry prefix, and the example IAM policy. For MinIO or another S3-compatible service, also set the endpoint URL and path-style addressing.
+
+### Port 8101/8102/8103 is already in use
+
+Stop the existing local cluster processes or change the bind addresses in your own launch command. The supplied smoke script uses those ports deliberately so the three-node check is reproducible.
+
+## Verified repository evidence
+
+The completed GitHub Actions verification run 238 recorded the following observed results:
+
+
+| Check | Result |
+| --- | --- |
+| Python tests | 30 passed in 0.45 s |
+| Python compilation | Passed |
+| SQO shell syntax checks | Passed |
+| Docker Compose configuration | Passed |
+| Local quorum failover | Passed |
+| 10,000-job SQLite-WAL load | 10,000 succeeded, 30,000 telemetry events |
+| Three-process network failover | node-1 failed; node-3 became leader |
+
+The 10,000-job run reported 4,502.97 jobs/s on the CI runner. Earlier development runs also recorded a local 60,000-job synthetic run at about 9.23K jobs/s. These are development/CI measurements, not production DGX throughput claims.
+
+The current repository deliberately does not claim a live AWS bucket result or a live DGX/Slurm production workload record when those environments are not available.
+
+## Verified snapshots
+
+The following images reproduce exact output captured from GitHub Actions run 238. They are kept with the repository so that the README documents observed behavior rather than simulated UI.
+
+### Installed command
+
+![Verified sqo CLI help](docs/assets/cli-help.svg)
+
+### Test suite
+
+![Verified pytest output](docs/assets/ci-tests.svg)
+
+### Local quorum failover
+
+![Verified local failover output](docs/assets/ci-failover.svg)
+
+### 10,000-job load test
+
+![Verified load output](docs/assets/ci-load.svg)
+
+### Three-node network failover
+
+![Verified network failover output](docs/assets/ci-network-failover.svg)
+
+## Further reading
+
+- [Architecture notes](docs/SQO_ARCHITECTURE.md)
+- [Deployment notes](deploy/README.md)
+- [Resume evidence](RESUME_EVIDENCE.md)
+- [Project implementation summary](SLURM_QUORUM_ORCHESTRATOR.md)
 
 ## License
 
-This project is licensed under the Pirate-Emperor License. See the [LICENSE](LICENSE) file for details.
-
-## Author
-
-**Pirate-Emperor**
-
-[![Twitter](https://skillicons.dev/icons?i=twitter)](https://twitter.com/PirateKingRahul)
-[![Discord](https://skillicons.dev/icons?i=discord)](https://discord.com/users/1200728704981143634)
-[![LinkedIn](https://skillicons.dev/icons?i=linkedin)](https://www.linkedin.com/in/piratekingrahul)
-
-[![Reddit](https://img.shields.io/badge/Reddit-FF5700?style=for-the-badge&logo=reddit&logoColor=white)](https://www.reddit.com/u/PirateKingRahul)
-[![Medium](https://img.shields.io/badge/Medium-42404E?style=for-the-badge&logo=medium&logoColor=white)](https://medium.com/@piratekingrahul)
-
-- GitHub: [Pirate-Emperor](https://github.com/Pirate-Emperor)
-- Reddit: [PirateKingRahul](https://www.reddit.com/u/PirateKingRahul/)
-- Twitter: [PirateKingRahul](https://twitter.com/PirateKingRahul)
-- Discord: [PirateKingRahul](https://discord.com/users/1200728704981143634)
-- LinkedIn: [PirateKingRahul](https://www.linkedin.com/in/piratekingrahul)
-- Skype: [Join Skype](https://join.skype.com/invite/yfjOJG3wv9Ki)
-- Medium: [PirateKingRahul](https://medium.com/@piratekingrahul)
-
-Thank you for visiting this project!
-
----
+The repository's existing LICENSE file applies to the surrounding repository. The SQO package did not replace or relicense the inherited project material.

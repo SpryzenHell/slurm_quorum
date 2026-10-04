@@ -1,0 +1,16 @@
+# Shared SQO configuration example
+redis_url = "redis://127.0.0.1:6379/0"
+queue = "gpu"
+namespace = "sqo"
+partition = "dgx"
+lease_ttl_s = 8
+agent_interval_s = 2
+worker_lease_s = 30
+s3_bucket = "YOUR_BUCKET"
+s3_prefix = "slurm-quorum"
+s3_telemetry_prefix = "slurm-quorum/telemetry"
+
+[node]
+node1 = "127.0.0.1:8101"
+node2 = "127.0.0.1:8102"
+node3 = "127.0.0.1:8103"

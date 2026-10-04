@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slurm-quorum-orchestrator"
+version = "0.2.0"
+description = "Distributed HPC control plane with Redis claims, SQLite WAL, quorum election, S3 fencing, and Slurm lifecycle tracking."
+requires-python = ">=3.11"
+dependencies = [
+  "redis>=5.0",
+]
+
+[project.scripts]
+sqo = "sqo_orchestrator.__main__:main"
+
+[project.optional-dependencies]
+aws = ["boto3>=1.35"]
+test = ["pytest>=8", "fakeredis[lua]>=2.26"]
+
+[tool.setuptools]
+package-dir = { "sqo_orchestrator" = "." }
+packages = ["sqo_orchestrator"]

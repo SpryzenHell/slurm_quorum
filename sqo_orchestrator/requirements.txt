@@ -1,0 +1,7 @@
+# Runtime integrations
+boto3>=1.35
+redis>=5.0
+
+# Test-only helpers
+fakeredis[lua]>=2.26
+pytest>=8

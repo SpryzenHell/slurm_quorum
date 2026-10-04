@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1050 500" role="img" aria-labelledby="t d">
+<title id="t">10,000-job load verification</title><desc id="d">Terminal output captured from GitHub Actions run 238 for the Slurm-Quorum Orchestrator.</desc>
+<rect width="1050" height="500" fill="#f7f7f5"/>
+<rect x="35" y="28" width="980" height="444" rx="6" fill="#151515"/>
+<circle cx="60" cy="55" r="6" fill="#ddd"/><circle cx="80" cy="55" r="6" fill="#aaa"/><circle cx="100" cy="55" r="6" fill="#777"/>
+<text x="130" y="61" class="title">PYTHONPATH=. python -m sqo_orchestrator load --jobs 10000 --workers 4 --root .sqo/ci-load</text>
+<line x1="50" y1="82" x2="1000" y2="82" stroke="#777"/>
+<text x="55" y="120" class="mono">{</text><text x="55" y="148" class="mono">  &quot;elapsed_s&quot;: 2.220757583000001,</text><text x="55" y="176" class="mono">  &quot;jobs_per_second&quot;: 4502.967850498609,</text><text x="55" y="204" class="mono">  &quot;jobs_submitted&quot;: 10000,</text><text x="55" y="232" class="mono">  &quot;sqlite_wal&quot;: true,</text><text x="55" y="260" class="mono">  &quot;state_counts&quot;: {</text><text x="55" y="288" class="mono">    &quot;succeeded&quot;: 10000</text><text x="55" y="316" class="mono">  },</text><text x="55" y="344" class="mono">  &quot;telemetry_events_replicated&quot;: 30000,</text><text x="55" y="372" class="mono">  &quot;workers&quot;: 4</text><text x="55" y="400" class="mono">}</text>
+</svg>
