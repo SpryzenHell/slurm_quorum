@@ -33,6 +33,7 @@ services:
       exit 0
 
   sqo-agent:
+    restart: unless-stopped
     build:
       context: ..
       dockerfile: deploy/Dockerfile.sqo
