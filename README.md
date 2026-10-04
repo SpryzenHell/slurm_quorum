@@ -1,5 +1,7 @@
 # Slurm-Quorum Orchestrator
 
+<p align="center"><img src="main.png" alt="Slurm-Quorum Orchestrator project overview" width="900"></p>
+
 A small control plane for running GPU workloads through Redis and Slurm while keeping job state locally durable and coordinating a three-node master election.
 
 The project is implemented in the `sqo_orchestrator/` package. The surrounding repository contains inherited/vendor material from the original project context; the SQO package is deliberately self-contained so it can be installed and run without installing the repository root as a whole.
