@@ -65,3 +65,7 @@ CLAUDE.local.md
 packages/python/dist/
 packages/python/build/
 packages/python/*.egg-sqoInfo/
+# SQO local state and Python build metadata
+.sqo/
+*.egg-info/
+__pycache__/
