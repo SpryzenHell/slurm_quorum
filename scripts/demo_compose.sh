@@ -37,4 +37,16 @@ sleep 3
 docker compose -f "$COMPOSE" exec -T redis redis-cli ZCARD sqo:ready:gpu
 docker compose -f "$COMPOSE" exec -T redis redis-cli ZCARD sqo:inflight:gpu
 
+echo '== telemetry objects =='
+for _ in $(seq 1 20); do
+  if docker compose -f "$COMPOSE" run --rm --entrypoint /bin/sh minio-init -c \
+    'mc alias set local http://minio:9000 sqo-minio sqo-minio-password >/dev/null 2>&1 && mc ls --recursive local/sqo/slurm-quorum/telemetry 2>/dev/null | grep -q .'; then
+    break
+  fi
+  sleep 1
+done
+
+docker compose -f "$COMPOSE" run --rm --entrypoint /bin/sh minio-init -c \
+  'mc alias set local http://minio:9000 sqo-minio sqo-minio-password >/dev/null 2>&1 && mc ls --recursive local/sqo/slurm-quorum/telemetry'
+
 echo 'compose SQO smoke complete'
