@@ -61,8 +61,10 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.sqo
     depends_on:
-      - redis
-      - s3-init
+      redis:
+        condition: service_started
+      s3-init:
+        condition: service_completed_successfully
     environment:
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
@@ -107,7 +109,8 @@ services:
       dockerfile: deploy/Dockerfile.sqo
     restart: unless-stopped
     depends_on:
-      - s3-init
+      s3-init:
+        condition: service_completed_successfully
     environment:
       SQO_NODE_ID: node-1
       AWS_ACCESS_KEY_ID: test
