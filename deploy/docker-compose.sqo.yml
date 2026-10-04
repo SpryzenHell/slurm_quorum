@@ -37,10 +37,13 @@ services:
         import boto3
         import time
 
+        from botocore.config import Config
+
         client = boto3.client(
             "s3",
             endpoint_url="http://localstack:4566",
             region_name="us-east-1",
+            config=Config(s3={"addressing_style": "path"}),
         )
         last = None
         for _ in range(60):
