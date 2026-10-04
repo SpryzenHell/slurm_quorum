@@ -261,6 +261,8 @@ Or run the repository smoke script:
 bash scripts/demo_compose.sh
 ```
 
+The repository also contains a manual GitHub Actions workflow, `sqo-compose.yml`, for running the same Docker integration test on an Ubuntu runner. The normal pull-request workflow validates the Compose file but does not pull the large LocalStack image on every code change.
+
 Check the quorum nodes:
 
 ```bash
