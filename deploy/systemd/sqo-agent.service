@@ -15,7 +15,12 @@ ExecStart=/usr/bin/python3 /opt/slurm-quorum/scripts/run_slurm_agent.py \
   --worker-id ${SQO_WORKER_ID} \
   --partition ${SQO_PARTITION} \
   --interval ${SQO_AGENT_INTERVAL_S} \
-  --lease-s ${SQO_LEASE_TTL_S}
+  --lease-s ${SQO_LEASE_TTL_S} \
+  --s3-bucket ${SQO_S3_BUCKET} \
+  --s3-prefix ${SQO_S3_PREFIX} \
+  --s3-telemetry-prefix ${SQO_S3_TELEMETRY_PREFIX} \
+  --s3-endpoint-url ${SQO_S3_ENDPOINT_URL} \
+  --s3-region ${SQO_S3_REGION}
 Restart=always
 RestartSec=2
 NoNewPrivileges=true
