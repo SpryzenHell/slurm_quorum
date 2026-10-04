@@ -5,5 +5,5 @@
 <circle cx="60" cy="55" r="6" fill="#ddd"/><circle cx="80" cy="55" r="6" fill="#aaa"/><circle cx="100" cy="55" r="6" fill="#777"/>
 <text x="130" y="61" class="title">PYTHONPATH=. python -m pytest -q</text>
 <line x1="50" y1="82" x2="850" y2="82" stroke="#777"/>
-<text x="55" y="120" class="mono">............................                                             [100%]</text><text x="55" y="148" class="mono"></text><text x="55" y="176" class="mono">28 passed in 0.57s</text>
+<text x="55" y="120" class="mono">............................                                             [100%]</text><text x="55" y="148" class="mono"></text><text x="55" y="176" class="mono">30 passed in 0.45s</text>
 </svg>
