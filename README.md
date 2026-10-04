@@ -231,7 +231,7 @@ The smoke test submits a small job that prints `SQO_SLURM_SMOKE_OK`, waits for t
 The repository contains a complete local lab with:
 
 - Redis with AOF enabled;
-- MinIO as an S3-compatible object store;
+- LocalStack as the local S3 API;
 - three SQO quorum nodes;
 - one SQO Redis-to-Slurm agent in dry-run mode.
 
@@ -273,7 +273,7 @@ Stop the lab:
 docker compose -f deploy/docker-compose.sqo.yml down -v --remove-orphans
 ```
 
-The Compose agent uses Slurm dry-run mode. It validates the complete queue → SQLite → agent → telemetry path without pretending that a Slurm controller exists inside the Compose network.
+The Compose lab uses LocalStack for the S3 API and Slurm dry-run mode. It validates queue admission, SQLite WAL state, S3 fencing, telemetry upload and agent reconciliation without pretending that a Slurm controller exists inside the Compose network.
 
 ## S3 fencing and telemetry
 
