@@ -76,13 +76,16 @@ def run_load(args: argparse.Namespace) -> int:
     if not orchestrator.acquire_master():
         raise SystemExit("could not acquire local master fencing lease")
 
-    print(
-        json.dumps(
-            orchestrator.load(args.jobs, args.workers),
-            indent=2,
-            sort_keys=True,
+    try:
+        print(
+            json.dumps(
+                orchestrator.load(args.jobs, args.workers),
+                indent=2,
+                sort_keys=True,
+            )
         )
-    )
+    finally:
+        orchestrator.release_master()
     return 0
 
 
