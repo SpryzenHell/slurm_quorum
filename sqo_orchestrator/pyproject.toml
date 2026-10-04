@@ -19,4 +19,5 @@ aws = ["boto3>=1.35"]
 test = ["pytest>=8", "fakeredis[lua]>=2.26"]
 
 [tool.setuptools]
+package-dir = { "sqo_orchestrator" = "." }
 packages = ["sqo_orchestrator"]
