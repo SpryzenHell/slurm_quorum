@@ -3,34 +3,57 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - '6379:6379'
-    command: ['redis-server', '--appendonly', 'yes']
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
 
-  minio:
-    image: quay.io/minio/aistor/minio:RELEASE.2026-09-19T17-05-25Z
+  localstack:
+    image: localstack/localstack:2026.08.0
     restart: unless-stopped
-    command: server /data --console-address ':9001'
     environment:
-      MINIO_ROOT_USER: sqo-minio
-      MINIO_ROOT_PASSWORD: sqo-minio-password
+      SERVICES: s3
+      DEFAULT_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
     ports:
-      - '9000:9000'
-      - '9001:9001'
+      - "4566:4566"
     volumes:
-      - minio-data:/data
+      - localstack-data:/var/lib/localstack
 
-  minio-init:
-    image: quay.io/minio/mc:latest
+  s3-init:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.sqo
     depends_on:
-      - minio
-    entrypoint: ['/bin/sh', '-c']
-    command: >-
-      until mc alias set local http://minio:9000 sqo-minio sqo-minio-password;
-      do sleep 2; done;
-      mc mb --ignore-existing local/sqo;
-      exit 0
+      - localstack
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    command:
+      - python
+      - -c
+      - |
+        import boto3
+        import time
+
+        client = boto3.client(
+            "s3",
+            endpoint_url="http://localstack:4566",
+            region_name="us-east-1",
+        )
+        last = None
+        for _ in range(60):
+            try:
+                client.create_bucket(Bucket="sqo")
+                break
+            except client.exceptions.BucketAlreadyOwnedByYou:
+                break
+            except Exception as exc:
+                last = exc
+                time.sleep(1)
+        else:
+            raise SystemExit(f"S3 bucket initialization failed: {last}")
 
   sqo-agent:
     restart: unless-stopped
@@ -39,10 +62,11 @@ services:
       dockerfile: deploy/Dockerfile.sqo
     depends_on:
       - redis
-      - minio-init
+      - s3-init
     environment:
-      AWS_ACCESS_KEY_ID: sqo-minio
-      AWS_SECRET_ACCESS_KEY: sqo-minio-password
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
     command:
       - python
       - /app/scripts/run_slurm_agent.py
@@ -59,9 +83,9 @@ services:
       - --partition
       - dgx
       - --interval
-      - '1'
+      - "1"
       - --lease-s
-      - '8'
+      - "8"
       - --s3-bucket
       - sqo
       - --s3-prefix
@@ -69,7 +93,7 @@ services:
       - --s3-telemetry-prefix
       - slurm-quorum/telemetry
       - --s3-endpoint-url
-      - http://minio:9000
+      - http://localstack:4566
       - --s3-region
       - us-east-1
       - --s3-force-path-style
@@ -83,12 +107,12 @@ services:
       dockerfile: deploy/Dockerfile.sqo
     restart: unless-stopped
     depends_on:
-      minio-init:
-        condition: service_completed_successfully
+      - s3-init
     environment:
       SQO_NODE_ID: node-1
-      AWS_ACCESS_KEY_ID: sqo-minio
-      AWS_SECRET_ACCESS_KEY: sqo-minio-password
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
     command:
       - python
       - -m
@@ -105,12 +129,12 @@ services:
       - --s3-prefix
       - slurm-quorum
       - --s3-endpoint-url
-      - http://minio:9000
+      - http://localstack:4566
       - --s3-region
       - us-east-1
       - --s3-force-path-style
     ports:
-      - '8101:8101'
+      - "8101:8101"
     volumes:
       - sqo-node-1:/data
 
@@ -120,12 +144,12 @@ services:
       dockerfile: deploy/Dockerfile.sqo
     restart: unless-stopped
     depends_on:
-      minio-init:
-        condition: service_completed_successfully
+      - s3-init
     environment:
       SQO_NODE_ID: node-2
-      AWS_ACCESS_KEY_ID: sqo-minio
-      AWS_SECRET_ACCESS_KEY: sqo-minio-password
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
     command:
       - python
       - -m
@@ -142,12 +166,12 @@ services:
       - --s3-prefix
       - slurm-quorum
       - --s3-endpoint-url
-      - http://minio:9000
+      - http://localstack:4566
       - --s3-region
       - us-east-1
       - --s3-force-path-style
     ports:
-      - '8102:8102'
+      - "8102:8102"
     volumes:
       - sqo-node-2:/data
 
@@ -157,12 +181,12 @@ services:
       dockerfile: deploy/Dockerfile.sqo
     restart: unless-stopped
     depends_on:
-      minio-init:
-        condition: service_completed_successfully
+      - s3-init
     environment:
       SQO_NODE_ID: node-3
-      AWS_ACCESS_KEY_ID: sqo-minio
-      AWS_SECRET_ACCESS_KEY: sqo-minio-password
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
     command:
       - python
       - -m
@@ -179,18 +203,18 @@ services:
       - --s3-prefix
       - slurm-quorum
       - --s3-endpoint-url
-      - http://minio:9000
+      - http://localstack:4566
       - --s3-region
       - us-east-1
       - --s3-force-path-style
     ports:
-      - '8103:8103'
+      - "8103:8103"
     volumes:
       - sqo-node-3:/data
 
 volumes:
   redis-data:
-  minio-data:
+  localstack-data:
   sqo-node-1:
   sqo-node-2:
   sqo-node-3:
